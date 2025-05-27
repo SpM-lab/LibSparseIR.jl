@@ -25,6 +25,10 @@ function spir_kernel_is_assigned(obj)
     ccall((:spir_kernel_is_assigned, libsparseir), Cint, (Ptr{spir_kernel},), obj)
 end
 
+function _spir_kernel_get_raw_ptr(obj)
+    ccall((:_spir_kernel_get_raw_ptr, libsparseir), Ptr{Cvoid}, (Ptr{spir_kernel},), obj)
+end
+
 mutable struct _spir_funcs end
 
 const spir_funcs = _spir_funcs
@@ -39,6 +43,10 @@ end
 
 function spir_funcs_is_assigned(obj)
     ccall((:spir_funcs_is_assigned, libsparseir), Cint, (Ptr{spir_funcs},), obj)
+end
+
+function _spir_funcs_get_raw_ptr(obj)
+    ccall((:_spir_funcs_get_raw_ptr, libsparseir), Ptr{Cvoid}, (Ptr{spir_funcs},), obj)
 end
 
 mutable struct _spir_basis end
@@ -57,6 +65,10 @@ function spir_basis_is_assigned(obj)
     ccall((:spir_basis_is_assigned, libsparseir), Cint, (Ptr{spir_basis},), obj)
 end
 
+function _spir_basis_get_raw_ptr(obj)
+    ccall((:_spir_basis_get_raw_ptr, libsparseir), Ptr{Cvoid}, (Ptr{spir_basis},), obj)
+end
+
 mutable struct _spir_sampling end
 
 const spir_sampling = _spir_sampling
@@ -73,6 +85,10 @@ function spir_sampling_is_assigned(obj)
     ccall((:spir_sampling_is_assigned, libsparseir), Cint, (Ptr{spir_sampling},), obj)
 end
 
+function _spir_sampling_get_raw_ptr(obj)
+    ccall((:_spir_sampling_get_raw_ptr, libsparseir), Ptr{Cvoid}, (Ptr{spir_sampling},), obj)
+end
+
 mutable struct _spir_sve_result end
 
 const spir_sve_result = _spir_sve_result
@@ -87,6 +103,10 @@ end
 
 function spir_sve_result_is_assigned(obj)
     ccall((:spir_sve_result_is_assigned, libsparseir), Cint, (Ptr{spir_sve_result},), obj)
+end
+
+function _spir_sve_result_get_raw_ptr(obj)
+    ccall((:_spir_sve_result_get_raw_ptr, libsparseir), Ptr{Cvoid}, (Ptr{spir_sve_result},), obj)
 end
 
 """
