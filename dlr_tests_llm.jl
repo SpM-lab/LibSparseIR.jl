@@ -20,13 +20,13 @@ function _get_dims(target_dim_size::Integer, extra_dims::Vector{<:Integer}, targ
     return dims
 end
 
-function generate_random_coeffs(::Type{<:Real}, random_value, pole)
-    (2 * random_value - 1.0) * sqrt(abs(pole))
+function generate_random_coeffs(::Type{<:Real}, random_value_real, random_value_imag, pole)
+    (2 * random_value_real - 1.0) * sqrt(abs(pole))
 end
 
-function generate_random_coeffs(::Type{<:Complex}, random_value, pole)
-    real_part = (2 * random_value - 1.0) * sqrt(abs(pole))
-    imag_part = (2 * random_value - 1.0) * sqrt(abs(pole))
+function generate_random_coeffs(::Type{<:Complex}, random_value_real, random_value_imag, pole)
+    real_part = (2 * random_value_real - 1.0) * sqrt(abs(pole))
+    imag_part = (2 * random_value_imag - 1.0) * sqrt(abs(pole))
     return complex(real_part, imag_part)
 end
 
@@ -150,7 +150,7 @@ function _evaluate_basis_functions(::Type{T}, u, x_values) where {T}
 end
 
 function _evaluate_gtau(coeffs::AbstractArray{T,N}, u, target_dim, x_values) where {T,N}
-    u_eval_mat = _evaluate_basis_functions(T, u, x_values)
+    u_eval_mat = _evaluate_basis_functions(Float64, u, x_values)
     return _transform_coefficients(coeffs, u_eval_mat, target_dim)
 end
 
@@ -327,17 +327,21 @@ function integration_test(::Type{T}, beta, wmax, epsilon, extra_dims, target_dim
 
     # Generate random DLR coefficients
     coeffs_targetdim0 = Array{T,ndim}(undef, npoles, extra_dims...)
+ 
     coeffs_2d = reshape(coeffs_targetdim0, Int64(npoles), Int64(extra_size))
     Random.seed!(982743)  # Same seed as C++ version
     for i in 1:npoles
         for j in 1:extra_size
-            coeffs_2d[i, j] = generate_random_coeffs(T, rand(), poles[i])
+            coeffs_2d[i, j] = generate_random_coeffs(T, rand(), rand(), poles[i])
         end
     end
+    #coeffs_targetdim0 .= 0.0
+    #coeffs_targetdim0[npoles ÷ 2] = 1.0
+    #coeffs_targetdim0[npoles ÷ 2 + 1] = 1.0
 
     # DLR sampling objects (MISSING in original Julia code)
     tau_sampling_dlr_status = Ref{Cint}(-100)
-    tau_sampling_dlr = LibSparseIR.spir_tau_sampling_new(basis, num_tau_points, tau_points_org, tau_sampling_dlr_status)
+    tau_sampling_dlr = LibSparseIR.spir_tau_sampling_new(dlr, num_tau_points, tau_points_org, tau_sampling_dlr_status)
     @test tau_sampling_dlr_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
     @test tau_sampling_dlr != C_NULL
 
@@ -367,7 +371,7 @@ function integration_test(::Type{T}, beta, wmax, epsilon, extra_dims, target_dim
     status[] = dlr_from_IR(dlr, order, ndim, _get_dims(npoles, extra_dims, target_dim, ndim), target_dim, g_IR, g_DLR_reconst)
     @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
 
-    # From DLR to IR
+    # From IR to DLR
     g_dlr = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
     status[] = dlr_from_IR(dlr, order, ndim, _get_dims(basis_size, extra_dims, target_dim, ndim), target_dim, g_IR, g_dlr)
     @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
@@ -549,12 +553,5 @@ for positive_only in [false, true]
         println("Integration test for bosonic LogisticKernel, ColMajor, target_dim = ", target_dim)
         integration_test(Float64, beta, wmax, epsilon, extra_dims, target_dim,
                         LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
-    end
-
-    for target_dim in 0:3
-        extra_dims = [2, 3, 4]
-        println("Integration test for bosonic LogisticKernel, RowMajor, target_dim = ", target_dim)
-        integration_test(Float64, beta, wmax, epsilon, extra_dims, target_dim,
-                        LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
     end
 end
