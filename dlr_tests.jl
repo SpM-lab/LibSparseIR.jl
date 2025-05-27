@@ -91,9 +91,6 @@ function movedim(arr::AbstractArray{T,N}, src, dst) where {T,N}
     return permutedims(arr, getperm(N, src, dst))
 end
 
-coeffs = movedim(coeffs_targetdim0, 1, 1 + target_dim) # Julia is 1-indexed
-nothing
-
 # %%
 function dlr_to_IR(dlr, order, ndim, dims, target_dim, coeffs::AbstractArray{<:Real}, g_IR::AbstractArray{<:Real})
     LibSparseIR.spir_dlr2ir_dd(dlr, order, ndim, dims, target_dim, coeffs, g_IR)
@@ -162,6 +159,10 @@ for i in axes(coeffs_2d, 1)
         coeffs_2d[i, j] = generate_random_coeffs(T, rand(), poles[i])
     end
 end
+
+
+coeffs = movedim(coeffs_targetdim0, 1, 1 + target_dim) # Julia is 1-indexed
+nothing
 
 # %%
 @test poles .|> abs |> maximum <= wmax
