@@ -122,6 +122,7 @@ target_dim = 0 # Julia is 1-indexed C/C++ is 0-indexed
 ndim = length(extra_dims) + 1
 T = Float64
 order = LibSparseIR.SPIR_ORDER_COLUMN_MAJOR
+positive_only = false
 
 # %%
 status = Ref{Cint}(-100)
@@ -212,7 +213,17 @@ ir_uhat = LibSparseIR.spir_basis_get_uhat(basis, ir_uhat_status)
 @test ir_uhat != C_NULL
 
 # %%
-function _transform_coeffients(coeffs::AbstractArray{T,N}, basis_eval::AbstractArray{T,2}, target_dim::Integer) where {T,N}
+function compare_tensors_with_relative_error(a, b, tol)
+    diff = abs.(a - b)
+    ref = abs.(a)
+    maxx_diff = maximum(diff)
+    maxx_ref = maximum(ref)
+    return maxx_diff <= tol * maxx_ref
+end
+
+
+# %%
+function _transform_coeffients(coeffs::AbstractArray{T,N}, basis_eval::AbstractMatrix{U}, target_dim::Integer) where {T,U,N}
     # Move the target dimension to the first position
     coeffs_targetdim0 = movedim(coeffs, 1 + target_dim, 1)
     # Calculate the size of the extra dimensions
@@ -222,7 +233,8 @@ function _transform_coeffients(coeffs::AbstractArray{T,N}, basis_eval::AbstractA
     dims[1] = size(basis_eval, 1)
     dims[2:end] .= size(coeffs_targetdim0)[2:end]
     # Initialize the result
-    result = Array{T,N}(undef, dims...)
+    PromoteType = promote_type(T, U)
+    result = Array{PromoteType,N}(undef, dims...)
     # Map tensors to matrices for multiplication
     coeffs_mat = reshape(coeffs_targetdim0, size(coeffs_targetdim0, 1), extra_size)
     result_mat = reshape(result, size(basis_eval, 1), extra_size)
@@ -254,6 +266,27 @@ function _evaluate_gtau(coeffs::AbstractArray{T,N}, u, target_dim, x_values) whe
     return _transform_coeffients(coeffs, u_eval_mat, target_dim)
 end
 
+function _evaluate_matsubara_basis_functions(uhat, matsubara_indices)
+    status = Ref{Cint}(-100)
+    funcs_size_ref = Ref{Cint}(0)
+    status = LibSparseIR.spir_funcs_get_size(uhat, funcs_size_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    funcs_size = funcs_size_ref[]
+
+    uhat_eval_mat = Matrix{ComplexF64}(undef, length(matsubara_indices), funcs_size)
+    freq_indices = Int64.(matsubara_indices)
+    order = LibSparseIR.SPIR_ORDER_COLUMN_MAJOR
+    status = LibSparseIR.spir_funcs_batch_eval_matsu(uhat, order, length(matsubara_indices), freq_indices, uhat_eval_mat)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return uhat_eval_mat
+end
+
+function _evaluate_giw(coeffs, uhat, target_dim, matsubara_indices)
+    uhat_eval_mat = _evaluate_matsubara_basis_functions(uhat, matsubara_indices)
+    result = _transform_coeffients(coeffs, uhat_eval_mat, target_dim)
+    return result
+end
+
 # %%
 num_tau_points_ref = Ref{Cint}(-100)
 LibSparseIR.spir_basis_get_n_default_taus(basis, num_tau_points_ref)
@@ -271,16 +304,6 @@ status = LibSparseIR.spir_sampling_get_npoints(tau_sampling, tau_points)
 
 
 # %%
-function compare_tensors_with_relative_error(a, b, tol)
-    diff = abs.(a - b)
-    ref = abs.(a)
-    maxx_diff = maximum(diff)
-    maxx_ref = maximum(ref)
-    return maxx_diff <= tol * maxx_ref
-end
-
-
-# %%
 # Compare the Greens function at all tau points between IR and DLR
 println("Evaluate Greens function at all tau points between IR and DLR")
 println("g_IR..")
@@ -291,6 +314,111 @@ gtau_from_DLR_reconst = _evaluate_gtau(g_DLR_reconst, dlr_u, target_dim, tau_poi
 
 @test compare_tensors_with_relative_error(gtau_from_IR, gtau_from_DLR, tol)
 @test compare_tensors_with_relative_error(gtau_from_IR, gtau_from_DLR_reconst, tol)
+
+
+# %%
+num_matsubara_points_org_ref = Ref{Cint}(0)
+status = LibSparseIR.spir_basis_get_n_default_matsus(basis, positive_only, num_matsubara_points_org_ref)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+num_matsubara_points_org = num_matsubara_points_org_ref[]
+@test num_matsubara_points_org > 0
+matsubara_points_org = Vector{Int64}(undef, num_matsubara_points_org)
+status = LibSparseIR.spir_basis_get_default_matsus(basis, positive_only, matsubara_points_org)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+status = Ref{Cint}(-100)
+matsubara_sampling = LibSparseIR.spir_matsu_sampling_new(basis, positive_only, num_matsubara_points_org, matsubara_points_org, status)
+@test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+num_matsubara_points_ref = Ref{Cint}(0)
+status = LibSparseIR.spir_sampling_get_npoints(matsubara_sampling, num_matsubara_points_ref)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+num_matsubara_points = num_matsubara_points_ref[]
+@test num_matsubara_points > 0
+matsubara_points = Vector{Int64}(undef, num_matsubara_points)
+status = LibSparseIR.spir_sampling_get_matsus(matsubara_sampling, matsubara_points)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+# %%
+giw_from_IR = _evaluate_giw(g_IR, ir_uhat, target_dim, matsubara_points)
+giw_from_DLR = _evaluate_giw(coeffs, dlr_uhat, target_dim, matsubara_points)
+
+@test compare_tensors_with_relative_error(giw_from_IR, giw_from_DLR, tol)
+
+# %%
+function _tau_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Real}, gtau::AbstractArray{<:Real})
+    status = LibSparseIR.spir_sampling_eval_dd(sampling, order, ndim, dims, target_dim, gIR, gtau)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Complex}, gtau::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_zz(sampling, order, ndim, dims, target_dim, gIR, gtau)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_fit(sampling, order, ndim, dims, target_dim, gtau::AbstractArray{<:Real}, gIR::AbstractArray{<:Real})
+    status = LibSparseIR.spir_sampling_fit_dd(sampling, order, ndim, dims, target_dim, gtau, gIR)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_fit(sampling, order, ndim, dims, target_dim, gtau::AbstractArray{<:Complex}, gIR::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_fit_zz(sampling, order, ndim, dims, target_dim, gtau, gIR)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _matsubara_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Real}, giw::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_dz(sampling, order, ndim, dims, target_dim, gIR, giw)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _matsubara_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Complex}, giw::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_zz(sampling, order, ndim, dims, target_dim, gIR, giw)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+# %%
+dims_matsubara = _get_dims(num_matsubara_points, extra_dims, target_dim, ndim)
+dims_IR = _get_dims(basis_size, extra_dims, target_dim, ndim)
+dims_tau = _get_dims(num_tau_points, extra_dims, target_dim, ndim)
+
+gIR = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+gIR2 = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+
+gtau = Array{T,ndim}(undef, _get_dims(num_tau_points, extra_dims, target_dim, ndim)...)
+giw_reconst = Array{ComplexF64,ndim}(undef, _get_dims(num_matsubara_points, extra_dims, target_dim, ndim)...)
+
+# Matsubara -> IR
+begin
+    gIR_work = Array{ComplexF64,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    status = LibSparseIR.spir_sampling_fit_zz(
+        matsubara_sampling, order, ndim, dims_matsubara, target_dim, giw_from_DLR, gIR_work
+    )
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    gIR .= real(gIR_work)
+end
+
+# IR -> tau
+status = _tau_sampling_evaluate(tau_sampling, order, ndim, dims_IR, target_dim, g_IR, gtau)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+# tau -> IR
+status = _tau_sampling_fit(tau_sampling, order, ndim, dims_tau, target_dim, gtau, gIR2)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+# IR -> Matsubara
+status = _matsubara_sampling_evaluate(matsubara_sampling, order, ndim, dims_IR, target_dim, gIR2, giw_reconst)
+@test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+giw_from_IR_reconst = _evaluate_giw(gIR2, ir_uhat, target_dim, matsubara_points)
+
+compare_tensors_with_relative_error(giw_from_DLR, giw_from_IR_reconst, tol)
+
 
 
 # %%
