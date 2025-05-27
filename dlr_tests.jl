@@ -16,7 +16,7 @@
 
 # %%
 using Pkg
-Pkg.activate(joinpath(@__DIR__, "LibSparseIR.jl"))
+Pkg.activate(@__DIR__)
 using LibSparseIR
 using Test
 
@@ -299,7 +299,7 @@ status = LibSparseIR.spir_sampling_get_npoints(tau_sampling, num_tau_points_ref)
 @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
 num_tau_points = num_tau_points_ref[]
 tau_points = Vector{T}(undef, num_tau_points)
-status = LibSparseIR.spir_sampling_get_npoints(tau_sampling, tau_points)
+status = LibSparseIR.spir_sampling_get_taus(tau_sampling, tau_points)
 @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
 
 
@@ -389,7 +389,6 @@ dims_tau = _get_dims(num_tau_points, extra_dims, target_dim, ndim)
 
 gIR = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
 gIR2 = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
-
 gtau = Array{T,ndim}(undef, _get_dims(num_tau_points, extra_dims, target_dim, ndim)...)
 giw_reconst = Array{ComplexF64,ndim}(undef, _get_dims(num_matsubara_points, extra_dims, target_dim, ndim)...)
 
@@ -400,7 +399,11 @@ begin
         matsubara_sampling, order, ndim, dims_matsubara, target_dim, giw_from_DLR, gIR_work
     )
     @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-    gIR .= real(gIR_work)
+    if T <: Real
+        gIR .= real(gIR_work)
+    else
+        gIR .= gIR_work
+    end
 end
 
 # IR -> tau
@@ -415,9 +418,12 @@ status = _tau_sampling_fit(tau_sampling, order, ndim, dims_tau, target_dim, gtau
 status = _matsubara_sampling_evaluate(matsubara_sampling, order, ndim, dims_IR, target_dim, gIR2, giw_reconst)
 @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
 
+# Final comparison test (MISSING in original Julia code)
 giw_from_IR_reconst = _evaluate_giw(gIR2, ir_uhat, target_dim, matsubara_points)
+# @test compare_tensors_with_relative_error(giw_from_DLR, giw_from_IR_reconst, tol)
+# TODO: resolve this numerical error
+# giw_from_DLR - giw_from_IR_reconst
 
-#compare_tensors_with_relative_error(giw_from_DLR, giw_from_IR_reconst, tol)
-(giw_from_DLR - giw_from_IR_reconst) .|> abs |> maximum
 
 
+# %%
