@@ -226,6 +226,42 @@ function spir_sve_result_new(k, epsilon, status)
 end
 
 """
+    spir_sve_result_get_size(sve, size)
+
+Gets the number of singular values/vectors in an SVE result.
+
+This function returns the number of singular values and corresponding singular vectors contained in the specified SVE result object. This number is needed to allocate arrays of the correct size when retrieving singular values or evaluating singular vectors.
+
+# Arguments
+* `sve`: Pointer to the SVE result object
+* `size`: Pointer to store the number of singular values/vectors
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A non-zero error code on failure
+"""
+function spir_sve_result_get_size(sve, size)
+    ccall((:spir_sve_result_get_size, libsparseir), Cint, (Ptr{spir_sve_result}, Ptr{Cint}), sve, size)
+end
+
+"""
+    spir_sve_result_get_svals(sve, svals)
+
+Gets the singular values from an SVE result.
+
+This function retrieves all singular values from the specified SVE result object. The singular values are stored in descending order in the output array.
+
+# Arguments
+* `sve`: Pointer to the SVE result object
+* `svals`: Pre-allocated array to store the singular values. Must have size at least equal to the value returned by [`spir_sve_result_get_size`](@ref)()
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A non-zero error code on failure
+# See also
+[`spir_sve_result_get_size`](@ref)
+"""
+function spir_sve_result_get_svals(sve, svals)
+    ccall((:spir_sve_result_get_svals, libsparseir), Cint, (Ptr{spir_sve_result}, Ptr{Cdouble}), sve, svals)
+end
+
+"""
     spir_funcs_get_size(funcs, size)
 
 Gets the number of functions in a functions object.
@@ -403,6 +439,17 @@ An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A 
 """
 function spir_basis_get_stats(b, statistics)
     ccall((:spir_basis_get_stats, libsparseir), Cint, (Ptr{spir_basis}, Ptr{Cint}), b, statistics)
+end
+
+"""
+    spir_basis_get_singular_values(b, svals)
+
+Gets the singular values of a finite temperature basis.
+
+This function returns the singular values of the specified finite temperature basis object. The singular values are the square roots of the eigenvalues of the covariance matrix of the basis functions.
+"""
+function spir_basis_get_singular_values(b, svals)
+    ccall((:spir_basis_get_singular_values, libsparseir), Cint, (Ptr{spir_basis}, Ptr{Cdouble}), b, svals)
 end
 
 """
