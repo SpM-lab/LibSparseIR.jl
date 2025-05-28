@@ -498,12 +498,6 @@ wmax = 2.0
 epsilon = 1e-10
 tol = 10 * epsilon
 
-# For debugging, let's use more relaxed tolerance initially
-# The large beta value can cause numerical precision issues
-if beta >= 1e+4
-    tol = 1e-6  # More relaxed tolerance for very large beta
-end
-
 # Run tests for different configurations like C++ version
 for positive_only in [false, true]
     println("positive_only = ", positive_only)
