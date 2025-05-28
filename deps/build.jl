@@ -5,7 +5,7 @@ Pkg.instantiate()
 using Clang.Generators
 using Clang.LibClang.Clang_jll
 
-include_dir = normpath(joinpath(@__DIR__, "../../include"))
+include_dir = normpath(joinpath(@__DIR__, "../../libsparseir/include"))
 sparseir_dir = joinpath(include_dir, "sparseir")
 
 # wrapper generator options

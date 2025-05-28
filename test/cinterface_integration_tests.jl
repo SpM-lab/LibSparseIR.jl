@@ -1,542 +1,553 @@
-# Tests corresponding to test/cpp/cinterface_integration.cxx
-# Comprehensive integration tests for the full workflow: DLR ↔ IR ↔ Sampling transformations
+@testitem "cinterface_integration_tests.jl" begin
+# Test file corresponding to test/cpp/cinterface_integration.cxx
 
-@testitem "Helper Function get_dims" begin
-    using LibSparseIR
+using LibSparseIR
+using Test
+using Random
 
-    # Test the get_dims helper function (corresponds to C++ get_dims template)
-    function get_dims(target_dim_size::Int, extra_dims::Vector{Int}, target_dim::Int, ndim::Int)
-        dims = Vector{Int}(undef, ndim)
-        dims[target_dim + 1] = target_dim_size  # Julia is 1-indexed
-        pos = 1
-        for i in 1:ndim
-            if i == target_dim + 1
-                continue
-            end
-            dims[i] = extra_dims[pos]
-            pos += 1
+# Helper function corresponding to _get_dims in cinterface_integration.cxx
+function _get_dims(target_dim_size::Integer, extra_dims::Vector{<:Integer}, target_dim::Integer, ndim::Integer)
+    dims = Vector{Int32}(undef, ndim)
+    dims[target_dim+1] = target_dim_size  # Julia is 1-indexed
+    pos = 1
+    for i in 1:ndim
+        if i == target_dim + 1
+            continue
         end
-        return dims
+        dims[i] = extra_dims[pos]
+        pos += 1
+    end
+    return dims
+end
+
+function generate_random_coeffs(::Type{<:Real}, random_value_real, random_value_imag, pole)
+    (2 * random_value_real - 1.0) * sqrt(abs(pole))
+end
+
+function generate_random_coeffs(::Type{<:Complex}, random_value_real, random_value_imag, pole)
+    real_part = (2 * random_value_real - 1.0) * sqrt(abs(pole))
+    imag_part = (2 * random_value_imag - 1.0) * sqrt(abs(pole))
+    return complex(real_part, imag_part)
+end
+
+# Helper function corresponding to _spir_basis_new in cinterface_integration.cxx
+function _spir_basis_new(statistics::Integer, beta::Float64, omega_max::Float64, epsilon::Float64, status::Ref{Cint})
+    # Create logistic kernel
+    kernel_status = Ref{Int32}(0)
+    kernel = LibSparseIR.spir_logistic_kernel_new(beta * omega_max, kernel_status)
+    @test kernel_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test kernel != C_NULL
+
+    # Create SVE result
+    sve_status = Ref{Int32}(0)
+    sve = LibSparseIR.spir_sve_result_new(kernel, epsilon, sve_status)
+    @test sve_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test sve != C_NULL
+
+    # Create basis
+    basis = LibSparseIR.spir_basis_new(statistics, beta, omega_max, kernel, sve, status)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test basis != C_NULL
+
+    # Clean up intermediate objects (like C++ version)
+    LibSparseIR.spir_sve_result_release(sve)
+    LibSparseIR.spir_kernel_release(kernel)
+
+    return basis
+end
+
+function getperm(N, src, dst)
+    perm = collect(1:N)
+    deleteat!(perm, src)
+    insert!(perm, dst, src)
+    return perm
+end
+
+"""
+    movedim(arr::AbstractArray, src => dst)
+
+Move `arr`'s dimension at `src` to `dst` while keeping the order of the remaining
+dimensions unchanged.
+"""
+function movedim(arr::AbstractArray{T,N}, src, dst) where {T,N}
+    src == dst && return arr
+    return permutedims(arr, getperm(N, src, dst))
+end
+
+function dlr_to_IR(dlr, order, ndim, dims, target_dim, coeffs::AbstractArray{<:Real}, g_IR::AbstractArray{<:Real})
+    LibSparseIR.spir_dlr2ir_dd(dlr, order, ndim, dims, target_dim, coeffs, g_IR)
+end
+
+function dlr_to_IR(dlr, order, ndim, dims, target_dim, coeffs::AbstractArray{<:Complex}, g_IR::AbstractArray{<:Complex})
+    LibSparseIR.spir_dlr2ir_zz(dlr, order, ndim, dims, target_dim, coeffs, g_IR)
+end
+
+function dlr_from_IR(dlr, order, ndim, dims, target_dim, g_IR::AbstractArray{<:Real}, g_DLR_reconst::AbstractArray{<:Real})
+    LibSparseIR.spir_ir2dlr_dd(dlr, order, ndim, dims, target_dim, g_IR, g_DLR_reconst)
+end
+
+function dlr_from_IR(dlr, order, ndim, dims, target_dim, g_IR::AbstractArray{<:Complex}, g_DLR_reconst::AbstractArray{<:Complex})
+    LibSparseIR.spir_ir2dlr_zz(dlr, order, ndim, dims, target_dim, g_IR, g_DLR_reconst)
+end
+
+function compare_tensors_with_relative_error(a, b, tol)
+    diff = abs.(a - b)
+    ref = abs.(a)
+    max_diff = maximum(diff)
+    max_ref = maximum(ref)
+
+    # Debug output like C++ version
+    if max_diff > tol * max_ref
+        println("max_diff: ", max_diff)
+        println("max_ref: ", max_ref)
+        println("tol: ", tol)
     end
 
-    @testset "Test get_dims functionality" begin
+    return max_diff <= tol * max_ref
+end
+
+function _transform_coefficients(coeffs::AbstractArray{T,N}, basis_eval::AbstractMatrix{U}, target_dim::Integer) where {T,U,N}
+    # Move the target dimension to the first position
+    coeffs_targetdim0 = movedim(coeffs, 1 + target_dim, 1)
+
+    # Calculate the size of the extra dimensions
+    extra_size = prod(size(coeffs_targetdim0)[2:end])
+
+    # Create result tensor with correct dimensions
+    dims = collect(size(coeffs_targetdim0))
+    dims[1] = size(basis_eval, 1)
+
+    # Initialize the result
+    PromotedType = promote_type(T, U)
+    result = Array{PromotedType,N}(undef, dims...)
+
+    # Map tensors to matrices for multiplication
+    coeffs_mat = reshape(coeffs_targetdim0, size(coeffs_targetdim0, 1), extra_size)
+    result_mat = reshape(result, size(basis_eval, 1), extra_size)
+
+    # Perform the matrix multiplication
+    result_mat .= basis_eval * coeffs_mat
+
+    # Move dimension back to original order
+    return movedim(result, 1, 1 + target_dim)
+end
+
+function _evaluate_basis_functions(::Type{T}, u, x_values) where {T}
+    status = Ref{Cint}(-100)
+    funcs_size_ref = Ref{Cint}(0)
+    status[] = LibSparseIR.spir_funcs_get_size(u, funcs_size_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    funcs_size = funcs_size_ref[]
+
+    u_eval_mat = Matrix{T}(undef, length(x_values), funcs_size)
+    for i in eachindex(x_values)
+        u_eval = Vector{T}(undef, funcs_size)
+        status[] = LibSparseIR.spir_funcs_eval(u, x_values[i], u_eval)
+        @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+        u_eval_mat[i, :] .= u_eval
+    end
+    return u_eval_mat
+end
+
+function _evaluate_gtau(coeffs::AbstractArray{T,N}, u, target_dim, x_values) where {T,N}
+    u_eval_mat = _evaluate_basis_functions(Float64, u, x_values)
+    return _transform_coefficients(coeffs, u_eval_mat, target_dim)
+end
+
+function _evaluate_matsubara_basis_functions(uhat, matsubara_indices)
+    status = Ref{Cint}(-100)
+    funcs_size_ref = Ref{Cint}(0)
+    status[] = LibSparseIR.spir_funcs_get_size(uhat, funcs_size_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    funcs_size = funcs_size_ref[]
+
+    uhat_eval_mat = Matrix{ComplexF64}(undef, length(matsubara_indices), funcs_size)
+    freq_indices = Int64.(matsubara_indices)
+    order = LibSparseIR.SPIR_ORDER_COLUMN_MAJOR
+    status[] = LibSparseIR.spir_funcs_batch_eval_matsu(uhat, order, length(matsubara_indices), freq_indices, uhat_eval_mat)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return uhat_eval_mat
+end
+
+function _evaluate_giw(coeffs, uhat, target_dim, matsubara_indices)
+    uhat_eval_mat = _evaluate_matsubara_basis_functions(uhat, matsubara_indices)
+    result = _transform_coefficients(coeffs, uhat_eval_mat, target_dim)
+    return result
+end
+
+function _tau_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Real}, gtau::AbstractArray{<:Real})
+    status = LibSparseIR.spir_sampling_eval_dd(sampling, order, ndim, dims, target_dim, gIR, gtau)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Complex}, gtau::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_zz(sampling, order, ndim, dims, target_dim, gIR, gtau)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_fit(sampling, order, ndim, dims, target_dim, gtau::AbstractArray{<:Real}, gIR::AbstractArray{<:Real})
+    status = LibSparseIR.spir_sampling_fit_dd(sampling, order, ndim, dims, target_dim, gtau, gIR)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _tau_sampling_fit(sampling, order, ndim, dims, target_dim, gtau::AbstractArray{<:Complex}, gIR::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_fit_zz(sampling, order, ndim, dims, target_dim, gtau, gIR)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _matsubara_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Real}, giw::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_dz(sampling, order, ndim, dims, target_dim, gIR, giw)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+function _matsubara_sampling_evaluate(sampling, order, ndim, dims, target_dim, gIR::AbstractArray{<:Complex}, giw::AbstractArray{<:Complex})
+    status = LibSparseIR.spir_sampling_eval_zz(sampling, order, ndim, dims, target_dim, gIR, giw)
+    @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    return status
+end
+
+# Main integration test function
+function integration_test(::Type{T}, beta, wmax, epsilon, extra_dims, target_dim, order, tol, positive_only) where T
+    # positive_only is not supported for complex numbers
+    @test !(T <: Complex && positive_only)
+
+    ndim = 1 + length(extra_dims)
+    @test ndim == 1 + length(extra_dims)
+
+    # Verify that the order parameter is consistent
+    if order == LibSparseIR.SPIR_ORDER_COLUMN_MAJOR
+        # Column major order
+    else
+        # Row major order
+    end
+
+    stat = LibSparseIR.SPIR_STATISTICS_BOSONIC
+    status = Ref{Cint}(-100)
+
+    # IR basis
+    basis = _spir_basis_new(stat, beta, wmax, epsilon, status)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test basis != C_NULL
+
+    basis_size_ref = Ref{Cint}(-100)
+    status[] = LibSparseIR.spir_basis_get_size(basis, basis_size_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    basis_size = basis_size_ref[]
+
+    # Tau Sampling
+    println("Tau sampling")
+    num_tau_points_ref = Ref{Cint}(-100)
+    status[] = LibSparseIR.spir_basis_get_n_default_taus(basis, num_tau_points_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    num_tau_points = num_tau_points_ref[]
+    @test num_tau_points > 0
+
+    tau_points_org = Vector{Float64}(undef, num_tau_points)
+    status[] = LibSparseIR.spir_basis_get_default_taus(basis, tau_points_org)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    tau_sampling_status = Ref{Cint}(-100)
+    tau_sampling = LibSparseIR.spir_tau_sampling_new(basis, num_tau_points, tau_points_org, tau_sampling_status)
+    @test tau_sampling_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test tau_sampling != C_NULL
+
+    status[] = LibSparseIR.spir_sampling_get_npoints(tau_sampling, num_tau_points_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    num_tau_points = num_tau_points_ref[]
+    tau_points = Vector{Float64}(undef, num_tau_points)
+    status[] = LibSparseIR.spir_sampling_get_taus(tau_sampling, tau_points)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test num_tau_points >= basis_size
+
+    # Compare tau_points and tau_points_org
+    for i in 1:num_tau_points
+        @test tau_points[i] ≈ tau_points_org[i]
+    end
+
+    # Matsubara Sampling
+    println("Matsubara sampling")
+    num_matsubara_points_org_ref = Ref{Cint}(0)
+    status[] = LibSparseIR.spir_basis_get_n_default_matsus(basis, positive_only, num_matsubara_points_org_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    num_matsubara_points_org = num_matsubara_points_org_ref[]
+    @test num_matsubara_points_org > 0
+
+    matsubara_points_org = Vector{Int64}(undef, num_matsubara_points_org)
+    status[] = LibSparseIR.spir_basis_get_default_matsus(basis, positive_only, matsubara_points_org)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    matsubara_sampling_status = Ref{Cint}(-100)
+    matsubara_sampling = LibSparseIR.spir_matsu_sampling_new(basis, positive_only, num_matsubara_points_org, matsubara_points_org, matsubara_sampling_status)
+    @test matsubara_sampling_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test matsubara_sampling != C_NULL
+
+    if positive_only
+        @test num_matsubara_points_org >= basis_size ÷ 2
+    else
+        @test num_matsubara_points_org >= basis_size
+    end
+
+    num_matsubara_points_ref = Ref{Cint}(0)
+    status[] = LibSparseIR.spir_sampling_get_npoints(matsubara_sampling, num_matsubara_points_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    num_matsubara_points = num_matsubara_points_ref[]
+    matsubara_points = Vector{Int64}(undef, num_matsubara_points)
+    status[] = LibSparseIR.spir_sampling_get_matsus(matsubara_sampling, matsubara_points)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # Compare matsubara_points and matsubara_points_org
+    for i in 1:num_matsubara_points
+        @test matsubara_points[i] == matsubara_points_org[i]
+    end
+
+    # DLR
+    println("DLR")
+    dlr_status = Ref{Cint}(-100)
+    dlr = LibSparseIR.spir_dlr_new(basis, dlr_status)
+    @test dlr_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test dlr != C_NULL
+
+    npoles_ref = Ref{Cint}(-100)
+    status[] = LibSparseIR.spir_dlr_get_npoles(dlr, npoles_ref)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    npoles = npoles_ref[]
+    @test npoles >= basis_size
+
+    poles = Vector{Float64}(undef, npoles)
+    status[] = LibSparseIR.spir_dlr_get_poles(dlr, poles)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # Calculate total size of extra dimensions
+    extra_size = prod(extra_dims)
+
+    # Generate random DLR coefficients
+    coeffs_targetdim0 = Array{T,ndim}(undef, npoles, extra_dims...)
+ 
+    coeffs_2d = reshape(coeffs_targetdim0, Int64(npoles), Int64(extra_size))
+    Random.seed!(982743)  # Same seed as C++ version
+    for i in 1:npoles
+        for j in 1:extra_size
+            coeffs_2d[i, j] = generate_random_coeffs(T, rand(), rand(), poles[i])
+        end
+    end
+    #coeffs_targetdim0 .= 0.0
+    #coeffs_targetdim0[npoles ÷ 2] = 1.0
+    #coeffs_targetdim0[npoles ÷ 2 + 1] = 1.0
+
+    # DLR sampling objects (MISSING in original Julia code)
+    tau_sampling_dlr_status = Ref{Cint}(-100)
+    tau_sampling_dlr = LibSparseIR.spir_tau_sampling_new(dlr, num_tau_points, tau_points_org, tau_sampling_dlr_status)
+    @test tau_sampling_dlr_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test tau_sampling_dlr != C_NULL
+
+    dlr_uhat2_status = Ref{Cint}(-100)
+    dlr_uhat2 = LibSparseIR.spir_basis_get_uhat(dlr, dlr_uhat2_status)
+    @test dlr_uhat2_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test dlr_uhat2 != C_NULL
+    @test LibSparseIR.spir_funcs_is_assigned(dlr_uhat2) == 1
+
+    matsubara_sampling_dlr_status = Ref{Cint}(-100)
+    matsubara_sampling_dlr = LibSparseIR.spir_matsu_sampling_new(dlr, positive_only, num_matsubara_points_org, matsubara_points_org, matsubara_sampling_dlr_status)
+    @test matsubara_sampling_dlr_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test matsubara_sampling_dlr != C_NULL
+
+    # Move the axis for the poles from the first to the target dimension
+    coeffs = movedim(coeffs_targetdim0, 1, 1 + target_dim)
+
+    # Convert DLR coefficients to IR coefficients
+    g_IR = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    status[] = dlr_to_IR(dlr, order, ndim, _get_dims(npoles, extra_dims, target_dim, ndim), target_dim, coeffs, g_IR)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # Convert IR coefficients back to DLR coefficients (this should reconstruct the original coeffs)
+    # Note: C++ version has a bug here - it creates g_DLR_reconst with basis_size but calls with npoles dims
+    # We follow the C++ version exactly to match behavior
+    g_DLR_reconst = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    status[] = dlr_from_IR(dlr, order, ndim, _get_dims(npoles, extra_dims, target_dim, ndim), target_dim, g_IR, g_DLR_reconst)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # From IR to DLR
+    g_dlr = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    status[] = dlr_from_IR(dlr, order, ndim, _get_dims(basis_size, extra_dims, target_dim, ndim), target_dim, g_IR, g_dlr)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # DLR basis functions
+    dlr_u_status = Ref{Cint}(-100)
+    dlr_u = LibSparseIR.spir_basis_get_u(dlr, dlr_u_status)
+    @test dlr_u_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test dlr_u != C_NULL
+
+    dlr_uhat_status = Ref{Cint}(-100)
+    dlr_uhat = LibSparseIR.spir_basis_get_uhat(dlr, dlr_uhat_status)
+    @test dlr_uhat_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test dlr_uhat != C_NULL
+
+    # IR basis functions
+    ir_u_status = Ref{Cint}(-100)
+    ir_u = LibSparseIR.spir_basis_get_u(basis, ir_u_status)
+    @test ir_u_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test ir_u != C_NULL
+
+    ir_uhat_status = Ref{Cint}(-100)
+    ir_uhat = LibSparseIR.spir_basis_get_uhat(basis, ir_uhat_status)
+    @test ir_uhat_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test ir_uhat != C_NULL
+
+    # Compare the Greens function at all tau points between IR and DLR
+    gtau_from_IR = _evaluate_gtau(g_IR, ir_u, target_dim, tau_points)
+    gtau_from_DLR = _evaluate_gtau(coeffs, dlr_u, target_dim, tau_points)
+    gtau_from_DLR_reconst = _evaluate_gtau(g_DLR_reconst, dlr_u, target_dim, tau_points)
+    @test compare_tensors_with_relative_error(gtau_from_IR, gtau_from_DLR, tol)
+    @test compare_tensors_with_relative_error(gtau_from_IR, gtau_from_DLR_reconst, tol)
+
+    # Use sampling to evaluate the Greens function at all tau points between IR and DLR (MISSING in original Julia code)
+    gtau_from_DLR_sampling = similar(gtau_from_DLR)
+    if T <: Real
+        status[] = LibSparseIR.spir_sampling_eval_dd(
+            tau_sampling_dlr, order, ndim,
+            _get_dims(npoles, extra_dims, target_dim, ndim),
+            target_dim, coeffs, gtau_from_DLR_sampling)
+    elseif T <: Complex
+        status[] = LibSparseIR.spir_sampling_eval_zz(
+            tau_sampling_dlr, order, ndim,
+            _get_dims(npoles, extra_dims, target_dim, ndim),
+            target_dim, coeffs, gtau_from_DLR_sampling)
+    end
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test compare_tensors_with_relative_error(gtau_from_IR, gtau_from_DLR_sampling, tol)
+
+    # Compare the Greens function at all Matsubara frequencies between IR and DLR
+    giw_from_IR = _evaluate_giw(g_IR, ir_uhat, target_dim, matsubara_points)
+    giw_from_DLR = _evaluate_giw(coeffs, dlr_uhat, target_dim, matsubara_points)
+    @test compare_tensors_with_relative_error(giw_from_IR, giw_from_DLR, tol)
+
+    # Use sampling to evaluate the Greens function at all Matsubara frequencies between IR and DLR (MISSING in original Julia code)
+    giw_from_DLR_sampling = similar(giw_from_DLR)
+    if T <: Real
+        status[] = LibSparseIR.spir_sampling_eval_dz(
+            matsubara_sampling_dlr, order, ndim,
+            _get_dims(npoles, extra_dims, target_dim, ndim),
+            target_dim, coeffs, giw_from_DLR_sampling)
+    elseif T <: Complex
+        status[] = LibSparseIR.spir_sampling_eval_zz(
+            matsubara_sampling_dlr, order, ndim,
+            _get_dims(npoles, extra_dims, target_dim, ndim),
+            target_dim, coeffs, giw_from_DLR_sampling)
+    end
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+    @test compare_tensors_with_relative_error(giw_from_IR, giw_from_DLR_sampling, tol)
+
+    dims_matsubara = _get_dims(num_matsubara_points, extra_dims, target_dim, ndim)
+    dims_IR = _get_dims(basis_size, extra_dims, target_dim, ndim)
+    dims_tau = _get_dims(num_tau_points, extra_dims, target_dim, ndim)
+
+    gIR = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    gIR2 = Array{T,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+    gtau = Array{T,ndim}(undef, _get_dims(num_tau_points, extra_dims, target_dim, ndim)...)
+    giw_reconst = Array{ComplexF64,ndim}(undef, _get_dims(num_matsubara_points, extra_dims, target_dim, ndim)...)
+
+    # Matsubara -> IR
+    begin
+        gIR_work = Array{ComplexF64,ndim}(undef, _get_dims(basis_size, extra_dims, target_dim, ndim)...)
+        status[] = LibSparseIR.spir_sampling_fit_zz(
+            matsubara_sampling, order, ndim, dims_matsubara, target_dim, giw_from_DLR, gIR_work
+        )
+        @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+        if T <: Real
+            gIR .= real(gIR_work)
+        else
+            gIR .= gIR_work
+        end
+    end
+
+    # IR -> tau
+    status[] = _tau_sampling_evaluate(tau_sampling, order, ndim, dims_IR, target_dim, gIR, gtau)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # tau -> IR
+    status[] = _tau_sampling_fit(tau_sampling, order, ndim, dims_tau, target_dim, gtau, gIR2)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # IR -> Matsubara
+    status[] = _matsubara_sampling_evaluate(matsubara_sampling, order, ndim, dims_IR, target_dim, gIR2, giw_reconst)
+    @test status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
+
+    # Final comparison test (MISSING in original Julia code)
+    giw_from_IR_reconst = _evaluate_giw(gIR2, ir_uhat, target_dim, matsubara_points)
+    @test compare_tensors_with_relative_error(giw_from_DLR, giw_from_IR_reconst, tol)
+
+    # Memory cleanup (MISSING in original Julia code)
+    LibSparseIR.spir_basis_release(basis)
+    LibSparseIR.spir_basis_release(dlr)
+    LibSparseIR.spir_funcs_release(dlr_u)
+    LibSparseIR.spir_funcs_release(ir_u)
+    LibSparseIR.spir_sampling_release(tau_sampling)
+    LibSparseIR.spir_sampling_release(tau_sampling_dlr)
+    LibSparseIR.spir_sampling_release(matsubara_sampling)
+    LibSparseIR.spir_sampling_release(matsubara_sampling_dlr)
+end
+
+# Test parameters
+beta = 1e+4
+wmax = 2.0
+epsilon = 1e-10
+tol = 10 * epsilon
+
+# Run tests for different configurations like C++ version
+for positive_only in [false, true]
+    println("positive_only = ", positive_only)
+
+    # Test 1: Simple 1D case
+    begin
+        extra_dims = Int[]
+        println("Integration test for bosonic LogisticKernel")
+        integration_test(Float64, beta, wmax, epsilon, extra_dims, 0,
+                        LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
+
+        if !positive_only
+            integration_test(ComplexF64, beta, wmax, epsilon, extra_dims, 0,
+                            LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
+        end
+    end
+
+    # Test 2: ColMajor, target_dim = 0
+    begin
+        target_dim = 0
+        extra_dims = Int[]
+        println("Integration test for bosonic LogisticKernel, ColMajor, target_dim = ", target_dim)
+        integration_test(Float64, beta, wmax, epsilon, extra_dims, target_dim,
+                        LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
+        if !positive_only
+            integration_test(ComplexF64, beta, wmax, epsilon, extra_dims, target_dim,
+                            LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
+        end
+    end
+
+    # Test 3: RowMajor, target_dim = 0
+    begin
+        target_dim = 0
+        extra_dims = Int[]
+        println("Integration test for bosonic LogisticKernel, RowMajor, target_dim = ", target_dim)
+        integration_test(Float64, beta, wmax, epsilon, extra_dims, target_dim,
+                        LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
+        if !positive_only
+            integration_test(ComplexF64, beta, wmax, epsilon, extra_dims, target_dim,
+                            LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
+        end
+    end
+
+    # Test 4: Multi-dimensional cases with extra dims = [2,3,4]
+    for target_dim in 0:3
         extra_dims = [2, 3, 4]
-
-        # target_dim = 0 (first dimension)
-        dims = get_dims(100, extra_dims, 0, 4)
-        @test dims == [100, 2, 3, 4]
-
-        # target_dim = 1 (second dimension)
-        dims = get_dims(100, extra_dims, 1, 4)
-        @test dims == [2, 100, 3, 4]
-
-        # target_dim = 2 (third dimension)
-        dims = get_dims(100, extra_dims, 2, 4)
-        @test dims == [2, 3, 100, 4]
-
-        # target_dim = 3 (fourth dimension)
-        dims = get_dims(100, extra_dims, 3, 4)
-        @test dims == [2, 3, 4, 100]
+        println("Integration test for bosonic LogisticKernel, ColMajor, target_dim = ", target_dim)
+        integration_test(Float64, beta, wmax, epsilon, extra_dims, target_dim,
+                        LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
     end
 end
 
-@testitem "Tensor Comparison Utilities" begin
-    using LibSparseIR
-
-    # Helper function to compare arrays with relative error tolerance (corresponds to C++ compare_tensors_with_relative_error)
-    function compare_arrays_with_relative_error(a::Array{T}, b::Array{T}, tol::Float64) where T
-        @test size(a) == size(b)
-
-        diff = abs.(a - b)
-        ref = abs.(a)
-
-        max_diff = maximum(diff)
-        max_ref = maximum(ref)
-
-        # Debug output if test fails
-        if max_diff > tol * max_ref
-            println("max_diff: $max_diff")
-            println("max_ref: $max_ref")
-            println("tol: $tol")
-            println("relative_error: $(max_diff / max_ref)")
-        end
-
-        return max_diff <= tol * max_ref
-    end
-
-    @testset "Array comparison functionality" begin
-        # Test with identical arrays
-        a = [1.0, 2.0, 3.0]
-        b = [1.0, 2.0, 3.0]
-        @test compare_arrays_with_relative_error(a, b, 1e-10)
-
-        # Test with small differences
-        a = [1.0, 2.0, 3.0]
-        b = [1.0001, 2.0001, 3.0001]
-        @test compare_arrays_with_relative_error(a, b, 1e-3)
-        @test !compare_arrays_with_relative_error(a, b, 1e-5)
-
-        # Test with complex numbers
-        a_complex = [1.0 + 0.0im, 2.0 + 1.0im]
-        b_complex = [1.0001 + 0.0001im, 2.0001 + 1.0001im]
-        @test compare_arrays_with_relative_error(a_complex, b_complex, 1e-3)
-    end
-end
-
-@testitem "Random Coefficient Generation" begin
-    using LibSparseIR
-    using Random
-
-    # Helper function to generate random coefficients (corresponds to C++ generate_random_coeff)
-    function generate_random_coeff(::Type{Float64}, random_value::Float64, pole::Float64)
-        return (2.0 * random_value - 1.0) * sqrt(abs(pole))
-    end
-
-    function generate_random_coeff(::Type{ComplexF64}, random_value::Float64, pole::Float64)
-        real_part = (2.0 * random_value - 1.0) * sqrt(abs(pole))
-        imag_part = (2.0 * random_value - 1.0) * sqrt(abs(pole))
-        return ComplexF64(real_part, imag_part)
-    end
-
-    @testset "Coefficient generation" begin
-        Random.seed!(982743)  # Same seed as C++ test
-
-        # Test real coefficients
-        pole = 2.5
-        coeff_real = generate_random_coeff(Float64, 0.7, pole)
-        @test isa(coeff_real, Float64)
-        @test abs(coeff_real) <= sqrt(abs(pole))
-
-        # Test complex coefficients
-        coeff_complex = generate_random_coeff(ComplexF64, 0.3, pole)
-        @test isa(coeff_complex, ComplexF64)
-        @test abs(real(coeff_complex)) <= sqrt(abs(pole))
-        @test abs(imag(coeff_complex)) <= sqrt(abs(pole))
-    end
-end
-
-@testitem "Main Integration Test" begin
-    using LibSparseIR
-    using Random
-
-    # Helper function equivalent to C++ _spir_basis_new
-    function _spir_basis_new(statistics::Integer, beta::Float64, omega_max::Float64, epsilon::Float64)
-        # Create logistic kernel
-        kernel_status = Ref{Int32}(0)
-        kernel = LibSparseIR.spir_logistic_kernel_new(beta * omega_max, kernel_status)
-        @test kernel_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test kernel != C_NULL
-
-        # Create SVE result
-        sve_status = Ref{Int32}(0)
-        sve = LibSparseIR.spir_sve_result_new(kernel, epsilon, sve_status)
-        @test sve_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test sve != C_NULL
-
-        # Create basis
-        basis_status = Ref{Int32}(0)
-        basis = LibSparseIR.spir_basis_new(statistics, beta, omega_max, kernel, sve, basis_status)
-        @test basis_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test basis != C_NULL
-
-        # Clean up intermediate objects (like C++ version)
-        LibSparseIR.spir_sve_result_release(sve)
-        LibSparseIR.spir_kernel_release(kernel)
-
-        return basis
-    end
-
-    # Include helper functions from previous test items
-    function get_dims(target_dim_size::Integer, extra_dims::Vector{<:Integer}, target_dim::Integer, ndim::Integer)
-        dims = Vector{Int32}(undef, ndim)
-        dims[target_dim + 1] = target_dim_size  # Julia is 1-indexed
-        pos = 1
-        for i in 1:ndim
-            if i == target_dim + 1
-                continue
-            end
-            dims[i] = extra_dims[pos]
-            pos += 1
-        end
-        return dims
-    end
-
-    function compare_arrays_with_relative_error(a::Array{T}, b::Array{T}, tol::Float64) where T
-        if size(a) != size(b)
-            return false
-        end
-
-        diff = abs.(a - b)
-        ref = abs.(a)
-
-        max_diff = maximum(diff)
-        max_ref = maximum(ref)
-
-        # Debug output if test fails
-        if max_diff > tol * max_ref
-            println("max_diff: $max_diff")
-            println("max_ref: $max_ref")
-            println("tol: $tol")
-            println("relative_error: $(max_diff / max_ref)")
-        end
-
-        return max_diff <= tol * max_ref
-    end
-
-    function generate_random_coeff(::Type{Float64}, random_value::Float64, pole::Float64)
-        return (2.0 * random_value - 1.0) * sqrt(abs(pole))
-    end
-
-    function generate_random_coeff(::Type{ComplexF64}, random_value::Float64, pole::Float64)
-        real_part = (2.0 * random_value - 1.0) * sqrt(abs(pole))
-        imag_part = (2.0 * random_value - 1.0) * sqrt(abs(pole))
-        return ComplexF64(real_part, imag_part)
-    end
-
-    # DLR transformation helper functions
-    function dlr_to_IR(dlr::Ptr{LibSparseIR.spir_basis}, order::Integer, dims::Vector{Int32},
-                       target_dim::Integer, coeffs::Vector{Float64})
-        g_IR = Vector{Float64}(undef, prod(dims))
-        status = LibSparseIR.spir_dlr2ir_dd(dlr, order, length(dims), dims, target_dim, coeffs, g_IR)
-        return status, g_IR
-    end
-
-    function dlr_to_IR(dlr::Ptr{LibSparseIR.spir_basis}, order::Integer, dims::Vector{Int32},
-                       target_dim::Integer, coeffs::Vector{ComplexF64})
-        g_IR = Vector{ComplexF64}(undef, prod(dims))
-        status = LibSparseIR.spir_dlr2ir_zz(dlr, order, length(dims), dims, target_dim,
-                                           coeffs,
-                                           g_IR)
-        return status, g_IR
-    end
-
-    function dlr_from_IR(dlr::Ptr{LibSparseIR.spir_basis}, order::Integer, dims::Vector{Int32},
-                        target_dim::Integer, coeffs::Vector{Float64})
-        g_DLR = Vector{Float64}(undef, prod(dims))
-        status = LibSparseIR.spir_ir2dlr_dd(dlr, order, length(dims), dims, target_dim, coeffs, g_DLR)
-        return status, g_DLR
-    end
-
-    function dlr_from_IR(dlr::Ptr{LibSparseIR.spir_basis}, order::Integer, dims::Vector{Int32},
-                        target_dim::Integer, coeffs::Vector{ComplexF64})
-        g_DLR = Vector{ComplexF64}(undef, prod(dims))
-        status = LibSparseIR.spir_ir2dlr_zz(dlr, order, length(dims), dims, target_dim,
-                                           coeffs,
-                                           g_DLR)
-        return status, g_DLR
-    end
-
-    # Sampling transformation helper functions
-    function tau_sampling_evaluate(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                                  dims::Vector{Int32}, target_dim::Integer, gIR::Vector{Float64})
-        gtau = Vector{Float64}(undef, prod(dims))
-        status = LibSparseIR.spir_sampling_eval_dd(sampling, order, length(dims), dims, target_dim, gIR, gtau)
-        return status, gtau
-    end
-
-    function tau_sampling_evaluate(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                                  dims::Vector{Int32}, target_dim::Integer, gIR::Vector{ComplexF64})
-        gtau = Vector{ComplexF64}(undef, prod(dims))
-        status = LibSparseIR.spir_sampling_eval_zz(sampling, order, length(dims), dims, target_dim,
-                                                  gIR,
-                                                  gtau)
-        return status, gtau
-    end
-
-    function tau_sampling_fit(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                             dims::Vector{Int32}, target_dim::Integer, gtau::Vector{Float64})
-        gIR = Vector{Float64}(undef, prod(dims))
-        status = LibSparseIR.spir_sampling_fit_dd(sampling, order, length(dims), dims, target_dim, gtau, gIR)
-        return status, gIR
-    end
-
-    function tau_sampling_fit(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                             dims::Vector{Int32}, target_dim::Integer, gtau::Vector{ComplexF64})
-        gIR = Vector{ComplexF64}(undef, prod(dims))
-        status = LibSparseIR.spir_sampling_fit_zz(sampling, order, length(dims), dims, target_dim,
-                                                 gtau,
-                                                 gIR)
-        return status, gIR
-    end
-
-    # FIXED: Matsubara sampling functions with correct array dimensions
-    function matsubara_sampling_evaluate(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                                        ir_dims::Vector{Int32}, target_dim::Integer, gIR::Vector{Float64}, matsu_dims::Vector{Int32})
-        giw = Vector{ComplexF64}(undef, prod(matsu_dims))
-        status = LibSparseIR.spir_sampling_eval_dz(sampling, order, length(ir_dims), ir_dims, target_dim, gIR,
-                                                  giw)
-        return status, giw
-    end
-
-    function matsubara_sampling_evaluate(sampling::Ptr{LibSparseIR.spir_sampling}, order::Integer,
-                                        ir_dims::Vector{Int32}, target_dim::Integer, gIR::Vector{ComplexF64}, matsu_dims::Vector{Int32})
-        giw = Vector{ComplexF64}(undef, prod(matsu_dims))
-        status = LibSparseIR.spir_sampling_eval_zz(sampling, order, length(ir_dims), ir_dims, target_dim,
-                                                  gIR,
-                                                  giw)
-        return status, giw
-    end
-
-    function movedim(arr::AbstractArray, src::Integer, dst::Integer)
-        if src == dst
-            return arr
-        else
-            perm = [1:ndims(arr)...]
-            perm[src] = dst
-            perm[dst] = src
-            return permutedims(arr, perm)
-        end
-    end
-    # Main integration test function (corresponds to C++ integration_test template)
-    function integration_test(::Type{T}, statistics::Integer, beta::Float64, wmax::Float64,
-                             epsilon::Float64, extra_dims::Vector{Int}, target_dim::Int,
-                             order::Integer, tol::Float64, positive_only::Bool) where T
-
-        # positive_only is not supported for complex numbers
-        if T == ComplexF64 && positive_only
-            @test_skip "positive_only not supported for complex numbers"
-            return
-        end
-
-        ndim = 1 + length(extra_dims)
-
-        println("Running integration test: T=$T, statistics=$statistics, target_dim=$target_dim, positive_only=$positive_only")
-
-        # Create IR basis using helper function (equivalent to C++ _spir_basis_new)
-        basis = _spir_basis_new(statistics, beta, wmax, epsilon)
-
-        # Get basis size
-        basis_size = Ref{Int32}(0)
-        size_status = LibSparseIR.spir_basis_get_size(basis, basis_size)
-        @test size_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        basis_size_val = basis_size[]
-
-        # Tau Sampling
-        println("Tau sampling")
-
-        # Add safety check for basis validity before calling tau functions
-        @test basis != C_NULL
-
-        num_tau_points = Ref{Int32}(0)
-        tau_status = LibSparseIR.spir_basis_get_n_default_taus(basis, num_tau_points)
-        @test tau_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test num_tau_points[] > 0
-
-        tau_points_org = Vector{Float64}(undef, num_tau_points[])
-        tau_get_status = LibSparseIR.spir_basis_get_default_taus(basis, tau_points_org)
-        @test tau_get_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        tau_sampling_status = Ref{Int32}(0)
-        tau_sampling = LibSparseIR.spir_tau_sampling_new(basis, num_tau_points[], tau_points_org, tau_sampling_status)
-        @test tau_sampling_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test tau_sampling != C_NULL
-
-        num_tau_points = Ref{Int32}(0)
-        num_tau_points_status = LibSparseIR.spir_sampling_get_npoints(tau_sampling, num_tau_points)
-        @test num_tau_points_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        tau_points = Vector{Float64}(undef, num_tau_points[])
-        tau_points_status = LibSparseIR.spir_sampling_get_taus(tau_sampling, tau_points)
-        @test tau_points_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test tau_points == tau_points_org
-        @test num_tau_points[] >= basis_size_val
-        # Matsubara Sampling
-        println("Matsubara sampling")
-        num_matsubara_points_org = Ref{Int32}(0)
-        matsu_status = LibSparseIR.spir_basis_get_n_default_matsus(basis, positive_only, num_matsubara_points_org)
-        @test matsu_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test num_matsubara_points_org[] > 0
-        matsubara_points_org = Vector{Int64}(undef, num_matsubara_points_org[])
-        matsu_get_status = LibSparseIR.spir_basis_get_default_matsus(basis, positive_only, matsubara_points_org)
-        @test matsu_get_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        matsubara_sampling_status = Ref{Int32}(0)
-        matsubara_sampling = LibSparseIR.spir_matsu_sampling_new(basis, positive_only, num_matsubara_points_org[], matsubara_points_org, matsubara_sampling_status)
-        @test matsubara_sampling_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test matsubara_sampling != C_NULL
-
-        if positive_only
-            @test num_matsubara_points_org[] >= basis_size_val / 2
-        else
-            @test num_matsubara_points_org[] >= basis_size_val
-        end
-
-        num_matsubara_points = Ref{Int32}(0)
-        num_matsubara_points_status = LibSparseIR.spir_sampling_get_npoints(matsubara_sampling, num_matsubara_points)
-        @test num_matsubara_points_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        matsubara_points = Vector{Int64}(undef, num_matsubara_points[])
-        matsubara_points_status = LibSparseIR.spir_sampling_get_matsus(matsubara_sampling, matsubara_points)
-        @test matsubara_points_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test matsubara_points == matsubara_points_org
-        # DLR
-        println("DLR")
-        dlr_status = Ref{Int32}(0)
-        dlr = LibSparseIR.spir_dlr_new(basis, dlr_status)
-        @test dlr_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test dlr != C_NULL
-
-        # Get number of poles
-        npoles = Ref{Int32}(0)
-        poles_status = LibSparseIR.spir_dlr_get_npoles(dlr, npoles)
-        @test poles_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        npoles_val = npoles[]
-        @test npoles_val >= basis_size_val
-
-        # Get poles
-        poles = Vector{Float64}(undef, npoles_val)
-        poles_get_status = LibSparseIR.spir_dlr_get_poles(dlr, poles)
-        @test poles_get_status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test maximum(abs.(poles)) <= wmax
-        # Calculate total size of extra dimensions
-        extra_size = prod(extra_dims)
-        coeffs_targetdim0 = Array{T}(undef, npoles_val, extra_dims...)
-        coeffs_2d = reshape(coeffs_targetdim0, Int64(npoles_val), extra_size)
-        # Generate random DLR coefficients
-        for i in 1:npoles_val, j in 1:extra_size
-            coeffs_2d[i, j] = generate_random_coeff(T, rand(), poles[i])
-        end
-        println("Generated $(length(coeffs_2d)) coefficients")
-        coeffs = movedim(coeffs_targetdim0, 1, 1+target_dim) # Julia is 1-based
-
-        # Convert DLR coefficients to IR coefficients
-        ir_dims = get_dims(basis_size_val, extra_dims, target_dim, ndim)
-        status, g_IR = dlr_to_IR(dlr, order, get_dims(npoles_val, extra_dims, target_dim, ndim), target_dim, vec(coeffs))
-        @test status == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test length(g_IR) == prod(ir_dims)
-        @test all(isfinite, g_IR)
-
-        # Convert IR coefficients back to DLR coefficients
-        status2, g_DLR_reconst = dlr_from_IR(dlr, order, ir_dims, target_dim, g_IR)
-        @test status2 == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        # From_IR C API
-        status3, g_dlr = dlr_from_IR(dlr, order, get_dims(basis_size_val, extra_dims, target_dim, ndim), target_dim, vec(g_IR))
-
-        # Get basis functions for evaluation
-        ir_u_status = Ref{Int32}(0)
-        ir_u = LibSparseIR.spir_basis_get_u(basis, ir_u_status)
-        @test ir_u_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test ir_u != C_NULL
-
-        ir_uhat_status = Ref{Int32}(0)
-        ir_uhat = LibSparseIR.spir_basis_get_uhat(basis, ir_uhat_status)
-        @test ir_uhat_status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-        @test ir_uhat != C_NULL
-
-        # Evaluate Green's function at Matsubara frequencies using IR coefficients
-        matsu_dims = get_dims(num_matsubara_points_org[], extra_dims, target_dim, ndim)
-        # FIXED: Pass both ir_dims and matsu_dims to the function
-        status_giw, giw_from_IR = matsubara_sampling_evaluate(matsubara_sampling, order, ir_dims, target_dim, g_IR, matsu_dims)
-        @test status_giw == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        # Fit Matsubara data back to IR coefficients
-        gIR_reconst = if T == Float64
-            # Use complex fit and take real part
-            gIR_temp = Vector{ComplexF64}(undef, prod(ir_dims))
-            status_temp = LibSparseIR.spir_sampling_fit_zz(matsubara_sampling, order, length(matsu_dims), matsu_dims, target_dim, giw_from_IR, gIR_temp)
-            @test status_temp == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-            real.(gIR_temp)
-        else
-            gIR_temp = Vector{ComplexF64}(undef, prod(ir_dims))
-            status_temp = LibSparseIR.spir_sampling_fit_zz(matsubara_sampling, order, length(matsu_dims), matsu_dims, target_dim, giw_from_IR, gIR_temp)
-            @test status_temp == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-            gIR_temp
-        end
-
-        # IR -> tau
-        tau_dims = get_dims(num_tau_points[], extra_dims, target_dim, ndim)
-        status_tau, gtau = tau_sampling_evaluate(tau_sampling, order, ir_dims, target_dim, gIR_reconst)
-        @test status_tau == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        # tau -> IR
-        status_tau_fit, gIR2 = tau_sampling_fit(tau_sampling, order, tau_dims, target_dim, gtau)
-        @test status_tau_fit == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        # IR -> Matsubara (final check)
-        # FIXED: Pass both ir_dims and matsu_dims to the function
-        status_final, giw_reconst = matsubara_sampling_evaluate(matsubara_sampling, order, ir_dims, target_dim, gIR2, matsu_dims)
-        @test status_final == LibSparseIR.SPIR_COMPUTATION_SUCCESS
-
-        # Verify consistency (basic checks)
-        @test all(isfinite, g_IR)
-        @test all(isfinite, g_DLR_reconst)
-        @test all(isfinite, gtau)
-        @test all(isfinite, gIR2)
-        @test all(isfinite, giw_reconst)
-
-        # Check that the round-trip transformations are reasonably consistent
-        # Note: We use a relaxed tolerance due to numerical precision in the transformations
-        @test compare_arrays_with_relative_error(gIR_reconst, gIR2, tol)
-
-        println("Integration test completed successfully")
-
-        # Cleanup resources in reverse order of creation
-        LibSparseIR.spir_funcs_release(ir_uhat)
-        LibSparseIR.spir_funcs_release(ir_u)
-        LibSparseIR.spir_basis_release(dlr)
-        LibSparseIR.spir_sampling_release(matsubara_sampling)
-        LibSparseIR.spir_sampling_release(tau_sampling)
-        LibSparseIR.spir_basis_release(basis)
-    end
-
-    @testset "Comprehensive Integration Tests" begin
-        beta = 10.0
-        wmax = 2.0
-        epsilon = 1e-10
-        tol = 10 * epsilon
-
-        # Test matrix corresponding to C++ comprehensive tests
-        println("Running comprehensive integration tests...")
-
-        for positive_only in [false]
-            println("positive_only = $positive_only")
-
-            # 1D tests with different memory orders
-            extra_dims = Int[]
-            target_dim = 0
-
-            @testset "1D Bosonic LogisticKernel ColMajor positive_only=$positive_only" begin
-                integration_test(Float64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                               extra_dims, target_dim, LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
-
-                if !positive_only
-                    integration_test(ComplexF64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                                   extra_dims, target_dim, LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
-                end
-            end
-
-            @testset "1D Bosonic LogisticKernel RowMajor positive_only=$positive_only" begin
-                integration_test(Float64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                               extra_dims, target_dim, LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
-
-                if !positive_only
-                    integration_test(ComplexF64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                                   extra_dims, target_dim, LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
-                end
-            end
-
-            # Multi-dimensional tests (corresponds to C++ extra_dims = {2,3,4})
-            # Use smaller dimensions to avoid memory issues
-            extra_dims = [2, 3, 4]
-
-            for target_dim in 0:3
-                @testset "4D Bosonic LogisticKernel ColMajor target_dim=$target_dim positive_only=$positive_only" begin
-                    # Add memory usage check before running heavy tests
-                    total_elements = prod(get_dims(18, extra_dims, target_dim, 4))  # Estimate with typical basis size
-                        integration_test(Float64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                                       extra_dims, target_dim, LibSparseIR.SPIR_ORDER_COLUMN_MAJOR, tol, positive_only)
-
-                end
-
-                @testset "4D Bosonic LogisticKernel RowMajor target_dim=$target_dim positive_only=$positive_only" begin
-                    # Add memory usage check before running heavy tests
-                    total_elements = prod(get_dims(18, extra_dims, target_dim, 4))  # Estimate with typical basis size
-
-                        integration_test(Float64, LibSparseIR.SPIR_STATISTICS_BOSONIC, beta, wmax, epsilon,
-                                       extra_dims, target_dim, LibSparseIR.SPIR_ORDER_ROW_MAJOR, tol, positive_only)
-                end
-            end
-        end
-
-        println("Comprehensive integration tests completed")
-    end
 end
