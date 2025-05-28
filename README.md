@@ -5,10 +5,11 @@ Julia interface for libsparseir
 ## Set up
 
 1. Install Julia
-1. Clone libsparseir
+1. Clone libsparseir and build C-API
 
    ```sh
    git clone https://github.com/SpM-lab/libsparseir.git
+   bash build_capi.sh
    ```
 1. Clone this project(LibSparseIR.jl)
    ```sh
