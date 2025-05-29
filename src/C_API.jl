@@ -1,4 +1,4 @@
-module LibSparseIR_C_API
+module C_API
 
 using CEnum
 

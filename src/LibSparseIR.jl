@@ -1,8 +1,645 @@
 module LibSparseIR
 
-include("C_API.jl") # LibSparseIR_C_API
-using .LibSparseIR_C_API
+using LinearAlgebra: LinearAlgebra
 
-greet() = print("Hello World!")
+include("C_API.jl") # LibSparseIR_C_API
+using .C_API
+
+# Abstract types
+abstract type Statistics end
+abstract type AbstractBasis end
+abstract type AbstractKernel end
+abstract type AbstractSampling end
+abstract type AbstractAugmentation end
+
+# Statistics types
+struct Fermionic <: Statistics end
+struct Bosonic <: Statistics end
+
+# Convert Julia statistics to C API constants
+_statistics_to_c(::Type{Fermionic}) = SPIR_STATISTICS_FERMIONIC
+_statistics_to_c(::Type{Bosonic}) = SPIR_STATISTICS_BOSONIC
+_statistics_from_c(s::Cint) = s == SPIR_STATISTICS_FERMIONIC ? Fermionic() : Bosonic()
+
+# Matsubara frequency type
+struct MatsubaraFreq{S<:Statistics}
+    n::Int
+end
+
+# Type aliases for Matsubara frequencies
+const FermionicFreq = MatsubaraFreq{Fermionic}
+const BosonicFreq = MatsubaraFreq{Bosonic}
+
+# Constant for π/β
+const pioverbeta = MatsubaraFreq{Bosonic}(1)
+
+# MatsubaraFreq functions
+function value(freq::FermionicFreq, beta::Real)
+    return (2 * freq.n + 1) * π / beta
+end
+
+function value(freq::BosonicFreq, beta::Real)
+    return 2 * freq.n * π / beta
+end
+
+function valueim(freq::MatsubaraFreq, beta::Real)
+    return 1im * value(freq, beta)
+end
+
+# Arithmetic operations for MatsubaraFreq
+Base.:+(freq::MatsubaraFreq{S}, n::Integer) where {S} = MatsubaraFreq{S}(freq.n + n)
+Base.:-(freq::MatsubaraFreq{S}, n::Integer) where {S} = MatsubaraFreq{S}(freq.n - n)
+Base.:-(freq::MatsubaraFreq{S}) where {S} = MatsubaraFreq{S}(-freq.n)
+Base.zero(::Type{MatsubaraFreq{S}}) where {S} = MatsubaraFreq{S}(0)
+
+# Kernel types
+mutable struct LogisticKernel{S<:Statistics} <: AbstractKernel
+    ptr::Ptr{spir_kernel}
+    lambda::Float64
+    
+    function LogisticKernel{S}(lambda::Real) where {S<:Statistics}
+        status = Ref{Cint}(0)
+        ptr = spir_logistic_kernel_new(Float64(lambda), status)
+        status[] != 0 && error("Failed to create logistic kernel")
+        kernel = new{S}(ptr, Float64(lambda))
+        finalizer(k -> spir_kernel_release(k.ptr), kernel)
+        return kernel
+    end
+end
+
+mutable struct RegularizedBoseKernel <: AbstractKernel
+    ptr::Ptr{spir_kernel}
+    lambda::Float64
+    
+    function RegularizedBoseKernel(lambda::Real)
+        status = Ref{Cint}(0)
+        ptr = spir_reg_bose_kernel_new(Float64(lambda), status)
+        status[] != 0 && error("Failed to create regularized Bose kernel")
+        kernel = new(ptr, Float64(lambda))
+        finalizer(k -> spir_kernel_release(k.ptr), kernel)
+        return kernel
+    end
+end
+
+# SVE Result wrapper
+mutable struct SVEResult
+    ptr::Ptr{spir_sve_result}
+    
+    function SVEResult(ptr::Ptr{spir_sve_result})
+        result = new(ptr)
+        finalizer(r -> spir_sve_result_release(r.ptr), result)
+        return result
+    end
+end
+
+# FiniteTempBasis type
+mutable struct FiniteTempBasis{S<:Statistics,K<:AbstractKernel} <: AbstractBasis
+    ptr::Ptr{spir_basis}
+    kernel::K
+    statistics::S
+    beta::Float64
+    eps::Float64
+    sve_result::SVEResult
+    
+    function FiniteTempBasis(beta::Real, omega_max::Real, epsilon::Real=1e-8;
+                            kernel::Union{Nothing,AbstractKernel}=nothing,
+                            statistics::S=Fermionic()) where {S<:Statistics}
+        
+        # Create kernel if not provided
+        if kernel === nothing
+            kernel = LogisticKernel{S}(beta * omega_max)
+        end
+        
+        # Create SVE result
+        status = Ref{Cint}(0)
+        sve_ptr = spir_sve_result_new(kernel.ptr, epsilon, status)
+        status[] != 0 && error("Failed to create SVE result")
+        sve_result = SVEResult(sve_ptr)
+        
+        # Create basis
+        ptr = spir_basis_new(_statistics_to_c(S), beta, omega_max, kernel.ptr, sve_result.ptr, status)
+        status[] != 0 && error("Failed to create basis")
+        
+        basis = new{S,typeof(kernel)}(ptr, kernel, statistics, Float64(beta), Float64(epsilon), sve_result)
+        finalizer(b -> spir_basis_release(b.ptr), basis)
+        
+        return basis
+    end
+end
+
+# Additional constructors
+FiniteTempBasis{S}(beta::Real, omega_max::Real, epsilon::Real=1e-8; kwargs...) where {S<:Statistics} =
+    FiniteTempBasis(beta, omega_max, epsilon; statistics=S(), kwargs...)
+
+# Sampling types
+mutable struct TauSampling{S<:Statistics} <: AbstractSampling
+    ptr::Ptr{spir_sampling}
+    basis::FiniteTempBasis{S}
+    
+    function TauSampling(basis::FiniteTempBasis{S}, taus::Union{Nothing,AbstractVector}=nothing) where {S<:Statistics}
+        if taus === nothing
+            # Get default tau points directly from C API
+            npoints = Ref{Cint}(0)
+            status = spir_basis_get_n_default_taus(basis.ptr, npoints)
+            status != 0 && error("Failed to get number of default tau points")
+            
+            taus = Vector{Float64}(undef, npoints[])
+            status = spir_basis_get_default_taus(basis.ptr, taus)
+            status != 0 && error("Failed to get default tau points")
+        end
+        
+        status = Ref{Cint}(0)
+        ptr = spir_tau_sampling_new(basis.ptr, length(taus), taus, status)
+        status[] != 0 && error("Failed to create tau sampling")
+        
+        sampling = new{S}(ptr, basis)
+        finalizer(s -> spir_sampling_release(s.ptr), sampling)
+        return sampling
+    end
+end
+
+mutable struct MatsubaraSampling{S<:Statistics} <: AbstractSampling
+    ptr::Ptr{spir_sampling}
+    basis::FiniteTempBasis{S}
+    positive_only::Bool
+    
+    function MatsubaraSampling(basis::FiniteTempBasis{S}, 
+                             matsubara_points::Union{Nothing,AbstractVector}=nothing;
+                             positive_only::Bool=false) where {S<:Statistics}
+        if matsubara_points === nothing
+            # Get default Matsubara points directly from C API
+            npoints = Ref{Cint}(0)
+            status = spir_basis_get_n_default_matsus(basis.ptr, positive_only, npoints)
+            status != 0 && error("Failed to get number of default Matsubara points")
+            
+            indices = Vector{Int64}(undef, npoints[])
+            status = spir_basis_get_default_matsus(basis.ptr, positive_only, indices)
+            status != 0 && error("Failed to get default Matsubara points")
+            matsubara_points = indices
+        end
+        
+        # Convert MatsubaraFreq to indices if needed
+        indices = if eltype(matsubara_points) <: MatsubaraFreq
+            [Int64(m.n) for m in matsubara_points]
+        else
+            Int64.(matsubara_points)
+        end
+        
+        status = Ref{Cint}(0)
+        ptr = spir_matsu_sampling_new(basis.ptr, positive_only, length(indices), indices, status)
+        status[] != 0 && error("Failed to create Matsubara sampling")
+        
+        sampling = new{S}(ptr, basis, positive_only)
+        finalizer(s -> spir_sampling_release(s.ptr), sampling)
+        return sampling
+    end
+end
+
+# Type aliases for sampling
+const TauSampling64 = TauSampling
+const MatsubaraSampling64F = MatsubaraSampling{Fermionic}
+const MatsubaraSampling64B = MatsubaraSampling{Bosonic}
+
+# Discrete Lehmann Representation
+mutable struct DiscreteLehmannRepresentation
+    ptr::Ptr{spir_basis}  # DLR uses spir_basis type
+    basis::FiniteTempBasis
+    
+    function DiscreteLehmannRepresentation(basis::FiniteTempBasis, rtol::Real=0.0)
+        status = Ref{Cint}(0)
+        ptr = spir_dlr_new(basis.ptr, status)
+        status[] != 0 && error("Failed to create DLR")
+        
+        dlr = new(ptr, basis)
+        finalizer(d -> spir_basis_release(d.ptr), dlr)
+        return dlr
+    end
+end
+
+# DLR helper functions
+function poles(dlr::DiscreteLehmannRepresentation)
+    npoles = Ref{Cint}(0)
+    status = spir_dlr_get_npoles(dlr.ptr, npoles)
+    status != 0 && error("Failed to get number of poles")
+    
+    poles_array = Vector{Float64}(undef, npoles[])
+    status = spir_dlr_get_poles(dlr.ptr, poles_array)
+    status != 0 && error("Failed to get poles")
+    return poles_array
+end
+
+Base.length(dlr::DiscreteLehmannRepresentation) = begin
+    npoles = Ref{Cint}(0)
+    status = spir_dlr_get_npoles(dlr.ptr, npoles)
+    status != 0 && error("Failed to get DLR size")
+    return Int(npoles[])
+end
+
+# Convert between IR and DLR
+function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractVector{<:Real})
+    nl = length(dlr.basis)
+    ndlr = length(dlr)
+    length(gl) == nl || throw(DimensionMismatch("Input must have length $(nl)"))
+    
+    dlr_coeffs = Vector{Float64}(undef, ndlr)
+    dims = Cint[nl]
+    status = spir_ir2dlr_dd(dlr.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gl, dlr_coeffs)
+    status != 0 && error("Failed to convert from IR to DLR")
+    return dlr_coeffs
+end
+
+function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractVector{<:Complex})
+    nl = length(dlr.basis)
+    ndlr = length(dlr)
+    length(gl) == nl || throw(DimensionMismatch("Input must have length $(nl)"))
+    
+    dlr_coeffs = Vector{ComplexF64}(undef, ndlr)
+    dims = Cint[nl]
+    status = spir_ir2dlr_zz(dlr.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gl, dlr_coeffs)
+    status != 0 && error("Failed to convert from IR to DLR")
+    return dlr_coeffs
+end
+
+function to_IR(dlr::DiscreteLehmannRepresentation, dlr_coeffs::AbstractVector{<:Real})
+    nl = length(dlr.basis)
+    ndlr = length(dlr)
+    length(dlr_coeffs) == ndlr || throw(DimensionMismatch("Input must have length $(ndlr)"))
+    
+    gl = Vector{Float64}(undef, nl)
+    dims = Cint[ndlr]
+    status = spir_dlr2ir_dd(dlr.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, dlr_coeffs, gl)
+    status != 0 && error("Failed to convert from DLR to IR")
+    return gl
+end
+
+function to_IR(dlr::DiscreteLehmannRepresentation, dlr_coeffs::AbstractVector{<:Complex})
+    nl = length(dlr.basis)
+    ndlr = length(dlr)
+    length(dlr_coeffs) == ndlr || throw(DimensionMismatch("Input must have length $(ndlr)"))
+    
+    gl = Vector{ComplexF64}(undef, nl)
+    dims = Cint[ndlr]
+    status = spir_dlr2ir_zz(dlr.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, dlr_coeffs, gl)
+    status != 0 && error("Failed to convert from DLR to IR")
+    return gl
+end
+
+# Augmentation types
+struct TauConst <: AbstractAugmentation end
+struct TauLinear <: AbstractAugmentation end
+struct MatsubaraConst <: AbstractAugmentation end
+
+# AugmentedBasis type - simplified wrapper since C API doesn't directly support augmentation
+struct AugmentedBasis{B<:AbstractBasis,A<:AbstractAugmentation} <: AbstractBasis
+    basis::B
+    augmentation::A
+end
+
+# FiniteTempBasisSet type
+struct FiniteTempBasisSet{S<:Statistics}
+    bases::Vector{FiniteTempBasis{S}}
+    beta::Float64
+    omega_max::Float64
+    eps_values::Vector{Float64}
+end
+
+function FiniteTempBasisSet(beta::Real, omega_max::Real, eps_values::AbstractVector{<:Real};
+                           statistics::S=Fermionic()) where {S<:Statistics}
+    bases = [FiniteTempBasis(beta, omega_max, eps; statistics=statistics) for eps in eps_values]
+    return FiniteTempBasisSet{S}(bases, Float64(beta), Float64(omega_max), Float64.(eps_values))
+end
+
+# Helper functions
+
+# Get basis size
+function Base.length(basis::FiniteTempBasis)
+    size = Ref{Cint}(0)
+    status = spir_basis_get_size(basis.ptr, size)
+    status != 0 && error("Failed to get basis size")
+    return Int(size[])
+end
+
+Base.size(basis::FiniteTempBasis) = (length(basis),)
+
+# Indexing support for basis
+function Base.getindex(basis::FiniteTempBasis, i::Integer)
+    1 <= i <= length(basis) || throw(BoundsError(basis, i))
+    # Return a "view" of the basis with only the i-th function
+    # This is a simplified implementation - full slicing would require C API support
+    return i
+end
+
+function Base.getindex(basis::FiniteTempBasis, inds::AbstractVector{<:Integer})
+    all(1 .<= inds .<= length(basis)) || throw(BoundsError(basis, inds))
+    # Return indices for now - full implementation would create a truncated basis
+    return inds
+end
+
+Base.firstindex(basis::FiniteTempBasis) = 1
+Base.lastindex(basis::FiniteTempBasis) = length(basis)
+
+# Basis function wrapper
+mutable struct BasisFunction <: Function
+    ptr::Ptr{spir_funcs}
+    basis::FiniteTempBasis
+    
+    function BasisFunction(ptr::Ptr{spir_funcs}, basis::FiniteTempBasis)
+        func = new(ptr, basis)
+        finalizer(f -> spir_funcs_release(f.ptr), func)
+        return func
+    end
+end
+
+# Make BasisFunction callable
+function (f::BasisFunction)(x::Real)
+    n = length(f.basis)
+    values = Vector{Float64}(undef, n)
+    status = spir_funcs_eval(f.ptr, Float64(x), values)
+    status != 0 && error("Failed to evaluate basis function")
+    return values
+end
+
+function (f::BasisFunction)(x::Integer) # For Matsubara frequencies
+    n = length(f.basis)
+    values = Vector{ComplexF64}(undef, n)
+    status = spir_funcs_eval_matsu(f.ptr, Int64(x), values)
+    status != 0 && error("Failed to evaluate basis function at Matsubara frequency")
+    return values
+end
+
+function (f::BasisFunction)(x::MatsubaraFreq)
+    return f(x.n)
+end
+
+# Get basis functions u, v, s, uhat
+function u(basis::FiniteTempBasis)
+    status = Ref{Cint}(0)
+    ptr = spir_basis_get_u(basis.ptr, status)
+    status[] != 0 && error("Failed to get u basis functions")
+    return BasisFunction(ptr, basis)
+end
+
+function v(basis::FiniteTempBasis)
+    status = Ref{Cint}(0)
+    ptr = spir_basis_get_v(basis.ptr, status)
+    status[] != 0 && error("Failed to get v basis functions")
+    return BasisFunction(ptr, basis)
+end
+
+function s(basis::FiniteTempBasis)
+    n = length(basis)
+    svals = Vector{Float64}(undef, n)
+    status = spir_sve_result_get_svals(basis.sve_result.ptr, svals)
+    status != 0 && error("Failed to get singular values")
+    return svals
+end
+
+function uhat(basis::FiniteTempBasis)
+    status = Ref{Cint}(0)
+    ptr = spir_basis_get_uhat(basis.ptr, status)
+    status[] != 0 && error("Failed to get uhat basis functions")
+    return BasisFunction(ptr, basis)
+end
+
+# Get sampling points
+function sampling_points(sampling::TauSampling)
+    npoints = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints)
+    status != 0 && error("Failed to get number of sampling points")
+    
+    taus = Vector{Float64}(undef, npoints[])
+    status = spir_sampling_get_taus(sampling.ptr, taus)
+    status != 0 && error("Failed to get tau sampling points")
+    return taus
+end
+
+function sampling_points(sampling::MatsubaraSampling{S}) where {S}
+    npoints = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints)
+    status != 0 && error("Failed to get number of sampling points")
+    
+    matsus = Vector{Int64}(undef, npoints[])
+    status = spir_sampling_get_matsus(sampling.ptr, matsus)
+    status != 0 && error("Failed to get Matsubara sampling points")
+    return [MatsubaraFreq{S}(Int(n)) for n in matsus]
+end
+
+# Get basis from sampling
+basis(sampling::AbstractSampling) = sampling.basis
+
+# Condition number computation for sampling
+function LinearAlgebra.cond(sampling::AbstractSampling)
+    # Approximate condition number from sampling matrix
+    # This would require access to the sampling matrix from C API
+    # For now, return a placeholder
+    return NaN
+end
+
+# Evaluate functions
+function evaluate(sampling::TauSampling, gl::AbstractVector{<:Real}; 
+                 result::Union{Nothing,AbstractVector{<:Real}}=nothing)
+    npoints_ref = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints_ref)
+    status != 0 && error("Failed to get number of sampling points")
+    npoints = Int(npoints_ref[])
+    
+    nl = length(gl)
+    
+    if result === nothing
+        result = Vector{Float64}(undef, npoints)
+    end
+    
+    dims = Cint[nl]
+    status = spir_sampling_eval_dd(sampling.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gl, result)
+    status != 0 && error("Failed to evaluate sampling")
+    return result
+end
+
+function evaluate!(sampling::TauSampling, gl::AbstractVector{<:Real}, result::AbstractVector{<:Real})
+    return evaluate(sampling, gl; result=result)
+end
+
+# Evaluate for real coefficients returning complex results
+function evaluate(sampling::MatsubaraSampling, gl::AbstractVector{<:Real}; 
+                 result::Union{Nothing,AbstractVector{<:Complex}}=nothing)
+    npoints_ref = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints_ref)
+    status != 0 && error("Failed to get number of sampling points")
+    npoints = Int(npoints_ref[])
+    
+    nl = length(gl)
+    
+    if result === nothing
+        result = Vector{ComplexF64}(undef, npoints)
+    end
+    
+    dims = Cint[nl]
+    status = spir_sampling_eval_dz(sampling.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gl, result)
+    status != 0 && error("Failed to evaluate sampling")
+    return result
+end
+
+function evaluate(sampling::MatsubaraSampling, gl::AbstractVector{<:Complex}; 
+                 result::Union{Nothing,AbstractVector{<:Complex}}=nothing)
+    npoints_ref = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints_ref)
+    status != 0 && error("Failed to get number of sampling points")
+    npoints = Int(npoints_ref[])
+    
+    nl = length(gl)
+    
+    if result === nothing
+        result = Vector{ComplexF64}(undef, npoints)
+    end
+    
+    dims = Cint[nl]
+    status = spir_sampling_eval_zz(sampling.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gl, result)
+    status != 0 && error("Failed to evaluate sampling")
+    return result
+end
+
+function evaluate!(sampling::MatsubaraSampling, gl::AbstractVector{<:Complex}, 
+                  result::AbstractVector{<:Complex})
+    return evaluate(sampling, gl; result=result)
+end
+
+# Fit functions
+function fit(sampling::TauSampling, gtau::AbstractVector{<:Real}; 
+            result::Union{Nothing,AbstractVector{<:Real}}=nothing)
+    npoints_ref = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints_ref)
+    status != 0 && error("Failed to get number of sampling points")
+    npoints = Int(npoints_ref[])
+    
+    nl = length(sampling.basis)
+    
+    if result === nothing
+        result = Vector{Float64}(undef, nl)
+    end
+    
+    dims = Cint[npoints]
+    status = spir_sampling_fit_dd(sampling.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gtau, result)
+    status != 0 && error("Failed to fit sampling")
+    return result
+end
+
+function fit!(sampling::TauSampling, gtau::AbstractVector{<:Real}, result::AbstractVector{<:Real})
+    return fit(sampling, gtau; result=result)
+end
+
+function fit(sampling::MatsubaraSampling, gn::AbstractVector{<:Complex}; 
+            result::Union{Nothing,AbstractVector{<:Complex}}=nothing)
+    npoints_ref = Ref{Cint}(0)
+    status = spir_sampling_get_npoints(sampling.ptr, npoints_ref)
+    status != 0 && error("Failed to get number of sampling points")
+    npoints = Int(npoints_ref[])
+    
+    nl = length(sampling.basis)
+    
+    if result === nothing
+        result = Vector{ComplexF64}(undef, nl)
+    end
+    
+    dims = Cint[npoints]
+    status = spir_sampling_fit_zz(sampling.ptr, SPIR_ORDER_COLUMN_MAJOR, 1, dims, 0, gn, result)
+    status != 0 && error("Failed to fit sampling")
+    return result
+end
+
+function fit!(sampling::MatsubaraSampling, gn::AbstractVector{<:Complex}, 
+             result::AbstractVector{<:Complex})
+    return fit(sampling, gn; result=result)
+end
+
+# Additional basis methods
+function rescale(basis::FiniteTempBasis, new_beta::Real)
+    # Rescale basis to new temperature
+    omega_max = basis.kernel.lambda / basis.beta
+    new_basis = FiniteTempBasis(new_beta, omega_max, basis.eps; 
+                               kernel=basis.kernel, statistics=basis.statistics)
+    return new_basis
+end
+
+function significance(basis::FiniteTempBasis)
+    # Get significance levels from singular values
+    svals = s(basis)
+    return svals ./ svals[1]
+end
+
+function accuracy(basis::FiniteTempBasis)
+    # Get the accuracy of the basis (last singular value)
+    svals = s(basis)
+    return svals[end]
+end
+
+# Default sampling points
+function default_tau_sampling_points(basis::FiniteTempBasis)
+    npoints = Ref{Cint}(0)
+    status = spir_basis_get_n_default_taus(basis.ptr, npoints)
+    status != 0 && error("Failed to get number of default tau points")
+    
+    points = Vector{Float64}(undef, npoints[])
+    status = spir_basis_get_default_taus(basis.ptr, points)
+    status != 0 && error("Failed to get default tau points")
+    return points
+end
+
+function default_omega_sampling_points(basis::FiniteTempBasis)
+    npoints = Ref{Cint}(0)
+    status = spir_basis_get_n_default_ws(basis.ptr, npoints)
+    status != 0 && error("Failed to get number of default omega points")
+    
+    points = Vector{Float64}(undef, npoints[])
+    status = spir_basis_get_default_ws(basis.ptr, points)
+    status != 0 && error("Failed to get default omega points")
+    return points
+end
+
+function default_matsubara_sampling_points(basis::FiniteTempBasis; positive_only::Bool=false)
+    npoints = Ref{Cint}(0)
+    status = spir_basis_get_n_default_matsus(basis.ptr, positive_only, npoints)
+    status != 0 && error("Failed to get number of default Matsubara points")
+    
+    points = Vector{Int64}(undef, npoints[])
+    status = spir_basis_get_default_matsus(basis.ptr, positive_only, points)
+    status != 0 && error("Failed to get default Matsubara points")
+    return [MatsubaraFreq{typeof(basis.statistics)}(Int(n)) for n in points]
+end
+
+# Overlap function using basis functions
+function overlap(a::AbstractVector, basis::FiniteTempBasis, b::AbstractVector)
+    # Compute overlap <a|basis|b> = sum_l a[l] * s[l] * b[l]
+    length(a) == length(basis) || throw(DimensionMismatch("Length of a must match basis size"))
+    length(b) == length(basis) || throw(DimensionMismatch("Length of b must match basis size"))
+    
+    svals = s(basis)
+    return sum(a[i] * svals[i] * b[i] for i in 1:length(basis))
+end
+
+# Create both fermionic and bosonic bases
+function finite_temp_bases(beta::Real, omega_max::Real, epsilon::Real=1e-8)
+    ferm_basis = FiniteTempBasis{Fermionic}(beta, omega_max, epsilon)
+    bose_basis = FiniteTempBasis{Bosonic}(beta, omega_max, epsilon)
+    return (ferm_basis, bose_basis)
+end
+
+# Export all public types and functions
+export Statistics, Fermionic, Bosonic
+export AbstractBasis, AbstractKernel, AbstractSampling, AbstractAugmentation
+export LogisticKernel, RegularizedBoseKernel
+export FiniteTempBasis, FiniteTempBasisSet, AugmentedBasis
+export TauSampling, MatsubaraSampling, TauSampling64, MatsubaraSampling64F, MatsubaraSampling64B
+export DiscreteLehmannRepresentation
+export MatsubaraFreq, FermionicFreq, BosonicFreq, pioverbeta
+export TauConst, TauLinear, MatsubaraConst
+export evaluate, evaluate!, fit, fit!
+export overlap, sampling_points, basis
+export value, valueim
+export u, v, s, uhat
+export rescale, significance, accuracy
+export finite_temp_bases
+export default_tau_sampling_points, default_omega_sampling_points, default_matsubara_sampling_points
+export poles, from_IR, to_IR
+export LinearAlgebra
 
 end # module LibSparseIR
