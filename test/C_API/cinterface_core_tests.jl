@@ -1,7 +1,7 @@
 # Tests corresponding to test/cpp/cinterface_core.cxx
 # Tests for kernel accuracy, basis constructors, and basis functions
 
-@testitem "Kernel Accuracy Tests" begin
+@testitem "Kernel Accuracy Tests" tags=[:cinterface] begin
     using LibSparseIR
 
     # Test individual kernels (corresponds to cinterface_core.cxx TEST_CASE "Kernel Accuracy Tests")

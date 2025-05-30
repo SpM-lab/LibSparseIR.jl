@@ -1,7 +1,7 @@
 # Tests corresponding to test/cpp/cinterface_sampling.cxx
 # Comprehensive sampling functionality tests including TauSampling and MatsubaraSampling
 
-@testitem "TauSampling" begin
+@testitem "TauSampling" tags=[:cinterface] begin
     using LibSparseIR
 
     # Helper function to create tau sampling (corresponds to C++ create_tau_sampling)

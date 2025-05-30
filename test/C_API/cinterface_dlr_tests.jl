@@ -1,7 +1,7 @@
 # Tests corresponding to test/cpp/cinterface_dlr.cxx
 # Comprehensive DLR (Discrete Lehmann Representation) functionality tests
 
-@testitem "DiscreteLehmannRepresentation" begin
+@testitem "DiscreteLehmannRepresentation" tags=[:cinterface] begin
     using LibSparseIR
 
     # Helper function equivalent to C++ _spir_basis_new

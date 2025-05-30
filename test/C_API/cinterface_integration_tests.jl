@@ -1,4 +1,4 @@
-@testitem "cinterface_integration_tests.jl" begin
+@testitem "cinterface_integration_tests.jl" tags=[:cinterface] begin
 # Test file corresponding to test/cpp/cinterface_integration.cxx
 
 using LibSparseIR
