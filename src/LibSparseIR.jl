@@ -19,5 +19,6 @@ export TauSampling, MatsubaraSampling, evaluate, fit, evaluate!, fit!,
 include("freq.jl")
 include("abstract.jl")
 include("kernel.jl")
+include("sve.jl")
 
 end # module LibSparseIR
