@@ -3,6 +3,8 @@ module LibSparseIR
 include("C_API.jl") # LibSparseIR_C_API
 using .C_API
 
+import LinearAlgebra
+
 export Fermionic, Bosonic
 export MatsubaraFreq, BosonicFreq, FermionicFreq, pioverbeta
 export FiniteTempBasis, FiniteTempBasisSet
@@ -15,5 +17,7 @@ export TauSampling, MatsubaraSampling, evaluate, fit, evaluate!, fit!,
        basis
 
 include("freq.jl")
+include("abstract.jl")
+include("kernel.jl")
 
 end # module LibSparseIR

@@ -1,18 +1,16 @@
-@testitem "kernel" begin
+@testitem "kernel.jl" tags=[:julia] begin
 	using LibSparseIR
 
 	@testset "Logistic kernel" begin
-		status = Ref{Int32}(0)
-		k = LibSparseIR.spir_logistic_kernel_new(9.0, status)
-		LibSparseIR.spir_kernel_release(k)
-		@test true
+		lam = 42
+		kernel = LogisticKernel(lam)
+		@test LibSparseIR.Λ(kernel) == lam
 	end
 
 	@testset "Regularized Bose kernel" begin
-		status = Ref{Int32}(0)
-		k = LibSparseIR.spir_reg_bose_kernel_new(10.0, status)
-		LibSparseIR.spir_kernel_release(k)
-		@test true
+		lam = 42
+		kernel = RegularizedBoseKernel(lam)
+		@test LibSparseIR.Λ(kernel) == lam
 	end
 
 	@testset "Kernel domain" begin
