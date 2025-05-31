@@ -13,13 +13,15 @@ export overlap
 export LogisticKernel, RegularizedBoseKernel
 export AugmentedBasis, TauConst, TauLinear, MatsubaraConst
 export TauSampling, MatsubaraSampling, evaluate, fit, evaluate!, fit!,
-       MatsubaraSampling64F, MatsubaraSampling64B, TauSampling64, sampling_points,
-       basis
+       sampling_points, basis, npoints
+export from_IR, to_IR, npoles, get_poles, default_omega_sampling_points
 
 include("freq.jl")
 include("abstract.jl")
 include("kernel.jl")
 include("sve.jl")
 include("basis.jl")
+include("sampling.jl")
+include("dlr.jl")
 
 end # module LibSparseIR
