@@ -27,6 +27,11 @@ Bosonic statistics.
 """
 struct Bosonic <: Statistics end
 
+# Convert Julia statistics to C API constants
+_statistics_to_c(::Type{Fermionic}) = SPIR_STATISTICS_FERMIONIC
+_statistics_to_c(::Type{Bosonic}) = SPIR_STATISTICS_BOSONIC
+_statistics_from_c(s::Cint) = s == SPIR_STATISTICS_FERMIONIC ? Fermionic() : Bosonic()
+
 zeta(::Fermionic) = 1
 zeta(::Bosonic)   = 0
 

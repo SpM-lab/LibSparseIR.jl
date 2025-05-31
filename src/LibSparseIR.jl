@@ -20,5 +20,6 @@ include("freq.jl")
 include("abstract.jl")
 include("kernel.jl")
 include("sve.jl")
+include("basis.jl")
 
 end # module LibSparseIR
