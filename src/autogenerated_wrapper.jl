@@ -127,7 +127,7 @@ FiniteTempBasis{S}(beta::Real, omega_max::Real, epsilon::Real=1e-8; kwargs...) w
     FiniteTempBasis(beta, omega_max, epsilon; statistics=S(), kwargs...)
 
 # Sampling types
-mutable struct TauSampling{S<:Statistics} <: AbstractSampling
+mutable struct TauSampling{S<:Statistics} <: AbstractSampling{S}
     ptr::Ptr{spir_sampling}
     basis::FiniteTempBasis{S}
     
@@ -153,7 +153,7 @@ mutable struct TauSampling{S<:Statistics} <: AbstractSampling
     end
 end
 
-mutable struct MatsubaraSampling{S<:Statistics} <: AbstractSampling
+mutable struct MatsubaraSampling{S<:Statistics} <: AbstractSampling{S}
     ptr::Ptr{spir_sampling}
     basis::FiniteTempBasis{S}
     positive_only::Bool

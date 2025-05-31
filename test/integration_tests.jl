@@ -177,18 +177,24 @@
         @test compare_tensors_with_relative_error(giw_from_IR, giw_from_DLR_sampling, tol)
         
         # Prepare arrays for transformations
-        dims_matsubara = _get_dims(num_matsubara_points, extra_dims, target_dim)
-        dims_IR = _get_dims(basis_size, extra_dims, target_dim)
-        dims_tau = _get_dims(num_tau_points, extra_dims, target_dim)
+        # Use the actual dimensions from g_IR to ensure consistency
+        gIR_dims = collect(size(g_IR))
+        gIR = Array{T}(undef, gIR_dims...)
+        gIR2 = Array{T}(undef, gIR_dims...)
         
-        gIR = Array{T}(undef, dims_IR...)
-        gIR2 = Array{T}(undef, dims_IR...)
-        gtau = Array{T}(undef, dims_tau...)
-        giw_reconst = Array{ComplexF64}(undef, dims_matsubara...)
+        # For gtau, use tau_points along target dimension
+        gtau_dims = collect(size(g_IR))
+        gtau_dims[target_dim + 1] = num_tau_points
+        gtau = Array{T}(undef, gtau_dims...)
+        
+        # For giw_reconst, use matsubara_points along target dimension
+        giw_reconst_dims = collect(size(g_IR))
+        giw_reconst_dims[target_dim + 1] = num_matsubara_points
+        giw_reconst = Array{ComplexF64}(undef, giw_reconst_dims...)
         
         # Matsubara -> IR
         if T <: Real
-            gIR_work = Array{ComplexF64}(undef, dims_IR...)
+            gIR_work = Array{ComplexF64}(undef, gIR_dims...)
             fit!(gIR_work, matsubara_sampling, giw_from_DLR; dim=target_dim + 1)
             gIR .= real.(gIR_work)
         else
