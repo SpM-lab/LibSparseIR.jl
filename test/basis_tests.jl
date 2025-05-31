@@ -1,30 +1,27 @@
-@testitem "basis" begin
+@testitem "basis.jl" tags=[:julia] begin
 	using LibSparseIR
 
 	β = 2.0
 	ωmax = 5.0
 	ε = 1e-6
-	
-	STATISTICS = [
-		LibSparseIR.SPIR_STATISTICS_BOSONIC,
-		LibSparseIR.SPIR_STATISTICS_FERMIONIC,
-	]
-
-	@testset "Statistics $(stat) " for stat in STATISTICS
-		status = Ref{Int32}(0)
-		k = LibSparseIR.spir_logistic_kernel_new(β * ωmax, status)
-		@test status[] == 0
-		sve = LibSparseIR.spir_sve_result_new(k, ε, status)
-		@test status[] == 0
-		basis = LibSparseIR.spir_basis_new(stat, β, ωmax, k, sve, status)
-		@test status[] == 0
-		@test basis != C_NULL
-		basis_size_ref = Ref{Cint}(0)
-		status = LibSparseIR.spir_basis_get_size(basis, basis_size_ref)
-		@test status == 0
-		basis_size = basis_size_ref[]
-		@test basis_size > 0
-		LibSparseIR.spir_basis_release(basis)
+	Λ = β * ωmax
+	@testset "FiniteTempBasis{S} for S=$(S)" for S in [Fermionic, Bosonic]
+		basis = FiniteTempBasis{S}(β, ωmax, ε)
 		@test true
+	end
+
+	@testset "FiniteTempBasis{S}/LogisticKernel for S=$(S)" for S in [Fermionic, Bosonic]
+		kernel = LogisticKernel(Λ)
+		basis = FiniteTempBasis{S}(kernel, β, ωmax, ε)
+		@test true
+	end
+
+	@testset "FiniteTempBasis{S}/RegularizedBoseKernel for S=$(S)" for S in [Fermionic, Bosonic]
+		kernel = RegularizedBoseKernel(Λ)
+		if S isa Fermionic
+			@test_throws "RegularizedBoseKernel does not support fermionic functions" FiniteTempBasis{S}(kernel, β, ωmax, ε)
+		else
+			@test true
+		end
 	end
 end
