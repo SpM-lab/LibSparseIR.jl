@@ -55,8 +55,11 @@ An `SVEResult` containing the truncated singular value expansion.
 mutable struct SVEResult
     ptr::Ptr{spir_sve_result}
     
-    function SVEResult(k::AbstractKernel, ε::Real)
-        # todo create
+    function SVEResult(kernel::AbstractKernel, ε::Real)
+        status = Ref{Int32}(-100)
+        sve_result = spir_sve_result_new(kernel.ptr, ε, status)
+        status[] == 0 || error("Failed to create SVEResult")
+        result = new(sve_result)
         finalizer(r -> spir_sve_result_release(r.ptr), result)
         return result
     end
