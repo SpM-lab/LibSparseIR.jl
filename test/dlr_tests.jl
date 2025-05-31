@@ -50,6 +50,13 @@
         @test npoles(dlr_custom) == length(default_poles)
         @test get_poles(dlr_custom) ≈ default_poles
         
+        # Verify poles can be retrieved correctly (like C++ test)
+        poles_reconst = get_poles(dlr_custom)
+        @test length(poles_reconst) == length(default_poles)
+        for i in 1:length(poles_reconst)
+            @test poles_reconst[i] ≈ default_poles[i]
+        end
+        
         # Test with random poles
         Random.seed!(123)
         num_poles = 10
@@ -59,6 +66,10 @@
         @test length(dlr_random) == num_poles
         @test dlr_random.poles ≈ random_poles
         @test maximum(abs, dlr_random.poles) ≤ ωmax
+        
+        # Verify custom poles are stored correctly
+        retrieved_poles = get_poles(dlr_random)
+        @test retrieved_poles ≈ random_poles
     end
     
     @testset "Default tau and Matsubara sampling points" begin

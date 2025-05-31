@@ -46,6 +46,34 @@ For the IR basis, we simply have that `σ[i] = s[i] / first(s)`.
 function significance end
 
 """
+    s(basis::AbstractBasis)
+
+Get the singular values of the basis.
+"""
+function s end
+
+"""
+    u(basis::AbstractBasis)
+
+Get the u basis functions (imaginary time).
+"""
+function u end
+
+"""
+    v(basis::AbstractBasis)
+
+Get the v basis functions (real frequency).
+"""  
+function v end
+
+"""
+    uhat(basis::AbstractBasis)
+
+Get the uhat basis functions (Matsubara frequency).
+"""
+function uhat end
+
+"""
     default_tau_sampling_points(basis::AbstractBasis)
 
 Default sampling points on the imaginary time/x axis.
@@ -71,6 +99,19 @@ function default_matsubara_sampling_points end
 Quantum statistic (Statistics instance, Fermionic() or Bosonic()).
 """
 statistics(::AbstractBasis{S}) where {S<:Statistics} = S()
+
+"""
+    overlap(a::AbstractVector, basis::AbstractBasis, b::AbstractVector)
+
+Compute the overlap ⟨a|S|b⟩ where S is the singular value matrix of the basis.
+"""
+function overlap(a::AbstractVector, basis::AbstractBasis, b::AbstractVector)
+    length(a) == length(basis) || throw(DimensionMismatch("Length of a must match basis size"))
+    length(b) == length(basis) || throw(DimensionMismatch("Length of b must match basis size"))
+    
+    svals = s(basis)
+    return sum(a[i] * svals[i] * b[i] for i in 1:length(basis))
+end
 
 """
     Λ(basis::AbstractBasis)

@@ -161,7 +161,8 @@ function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, coeffs::Abstra
     
     # Determine output type based on sampling type
     if sampling isa TauSampling
-        output_type = T <: Real ? T : real(T)
+        # For complex input, TauSampling should produce complex output
+        output_type = T
         output = Array{output_type,N}(undef, output_dims...)
         evaluate!(output, sampling, coeffs; dim=dim)
     else # MatsubaraSampling
@@ -242,7 +243,8 @@ function fit(sampling::Union{TauSampling,MatsubaraSampling}, values::AbstractArr
     
     # Determine output type - typically real for coefficients 
     if sampling isa TauSampling
-        output_type = T <: Real ? T : real(T)
+        # For complex input, we need complex output
+        output_type = T
     else # MatsubaraSampling
         # For Matsubara sampling, we need to be careful about type matching
         # The C API might expect complex output even for real input

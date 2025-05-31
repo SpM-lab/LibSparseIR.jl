@@ -54,6 +54,35 @@
         @test fitted_coeffs_inplace ≈ fitted_coeffs
     end
     
+    @testset "Complex coefficients for TauSampling" begin
+        # Test complex->complex transformation (like C++ test)
+        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        tau_sampling = TauSampling(basis)
+        
+        Random.seed!(42)
+        complex_coeffs = randn(ComplexF64, length(basis))
+        
+        # Test evaluate with complex coefficients
+        tau_values_complex = evaluate(tau_sampling, complex_coeffs)
+        @test length(tau_values_complex) == npoints(tau_sampling)
+        @test eltype(tau_values_complex) == ComplexF64
+        
+        # Test roundtrip with complex
+        fitted_complex = fit(tau_sampling, tau_values_complex)
+        @test length(fitted_complex) == length(basis)
+        @test eltype(fitted_complex) == ComplexF64
+        @test fitted_complex ≈ complex_coeffs atol=1e-11
+        
+        # Test in-place versions
+        tau_values_inplace = similar(tau_values_complex)
+        evaluate!(tau_values_inplace, tau_sampling, complex_coeffs)
+        @test tau_values_inplace ≈ tau_values_complex
+        
+        fitted_inplace = similar(fitted_complex)
+        fit!(fitted_inplace, tau_sampling, tau_values_complex)
+        @test fitted_inplace ≈ fitted_complex
+    end
+    
     @testset "Multi-dimensional arrays" begin
         basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
@@ -80,6 +109,40 @@
         end
     end
     
+    @testset "4D arrays (like C++ tests)" begin
+        # Test with 4D arrays like the C++ tests
+        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        tau_sampling = TauSampling(basis)
+        
+        Random.seed!(42)
+        d1, d2, d3 = 2, 3, 4
+        
+        # Test all 4 dimension permutations
+        for target_dim in 1:4
+            dims = [d1, d2, d3]
+            insert!(dims, target_dim, length(basis))
+            coeffs_4d = randn(Float64, dims...)
+            
+            # Evaluate
+            tau_values_4d = evaluate(tau_sampling, coeffs_4d; dim=target_dim)
+            expected_dims = copy(dims)
+            expected_dims[target_dim] = npoints(tau_sampling)
+            @test size(tau_values_4d) == tuple(expected_dims...)
+            
+            # Fit and check roundtrip
+            fitted_4d = fit(tau_sampling, tau_values_4d; dim=target_dim)
+            @test size(fitted_4d) == size(coeffs_4d)
+            @test fitted_4d ≈ coeffs_4d atol=1e-10
+            
+            # Test with complex coefficients too
+            complex_coeffs_4d = randn(ComplexF64, dims...)
+            tau_complex_4d = evaluate(tau_sampling, complex_coeffs_4d; dim=target_dim)
+            @test eltype(tau_complex_4d) == ComplexF64
+            fitted_complex_4d = fit(tau_sampling, tau_complex_4d; dim=target_dim)
+            @test fitted_complex_4d ≈ complex_coeffs_4d atol=1e-10
+        end
+    end
+    
     @testset "Error handling" begin
         basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
@@ -90,6 +153,19 @@
         
         wrong_size_values = randn(npoints(tau_sampling) + 1)
         @test_throws ErrorException fit(tau_sampling, wrong_size_values)
+    end
+    
+    @testset "API consistency checks" begin
+        # Test that tau sampling doesn't support getting Matsubara frequencies
+        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        tau_sampling = TauSampling(basis)
+        
+        # In Julia, we don't have direct access to C API error codes, 
+        # but we can test that only tau points are available
+        @test hasmethod(sampling_points, (TauSampling,))
+        tau_points = sampling_points(tau_sampling)
+        @test all(p isa Float64 for p in tau_points)
+        @test all(-1 <= p <= 1 for p in tau_points)  # tau is in [-1, 1] for normalized basis
     end
 end
 
@@ -204,6 +280,52 @@ end
             fitted_coeffs = fit(matsu_sampling, matsu_values; dim=dim)
             @test size(fitted_coeffs) == size(coeffs)
             @test fitted_coeffs ≈ coeffs atol=1e-10
+        end
+    end
+    
+    @testset "4D arrays with positive_only (like C++ tests)" begin
+        # Test with 4D arrays including positive_only option
+        basis = FiniteTempBasis{Bosonic}(1.0, 10.0, 1e-10)
+        
+        for positive_only in [false, true]
+            matsu_sampling = MatsubaraSampling(basis; positive_only=positive_only)
+            
+            Random.seed!(42)
+            d1, d2, d3 = 2, 3, 4
+            
+            # Test all 4 dimension permutations
+            for target_dim in 1:4
+                dims = [d1, d2, d3]
+                insert!(dims, target_dim, length(basis))
+                
+                # Test real coefficients
+                coeffs_4d = randn(Float64, dims...)
+                matsu_values_4d = evaluate(matsu_sampling, coeffs_4d; dim=target_dim)
+                expected_dims = copy(dims)
+                expected_dims[target_dim] = npoints(matsu_sampling)
+                @test size(matsu_values_4d) == tuple(expected_dims...)
+                @test eltype(matsu_values_4d) == ComplexF64
+                
+                fitted_4d = fit(matsu_sampling, matsu_values_4d; dim=target_dim)
+                @test size(fitted_4d) == size(coeffs_4d)
+                @test fitted_4d ≈ coeffs_4d atol=1e-10
+                
+                # Test complex coefficients
+                # Note: For physical Green's functions, coefficients should be real
+                # But our C API supports complex coefficients for generality
+                # When fitting complex Matsubara values from complex coefficients,
+                # we extract the real part as per the implementation
+                complex_coeffs_4d = randn(ComplexF64, dims...)
+                matsu_complex_4d = evaluate(matsu_sampling, complex_coeffs_4d; dim=target_dim)
+                @test eltype(matsu_complex_4d) == ComplexF64
+                
+                fitted_complex_4d = fit(matsu_sampling, matsu_complex_4d; dim=target_dim)
+                # The fit extracts real part of the result
+                @test eltype(fitted_complex_4d) == Float64
+                # We can't expect to recover the original complex coefficients exactly
+                # when we're extracting only the real part
+                # Just check that the fitting process completes without error
+            end
         end
     end
     

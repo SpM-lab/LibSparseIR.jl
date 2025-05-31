@@ -90,3 +90,127 @@ function default_matsubara_sampling_points(basis::FiniteTempBasis; positive_only
         return [BosonicFreq(n) for n in points]
     end
 end
+
+function default_omega_sampling_points(basis::FiniteTempBasis)
+    n_points = Ref{Int32}(-1)
+    ret = C_API.spir_basis_get_n_default_ws(basis.ptr, n_points)
+    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default omega points")
+    
+    points = Vector{Float64}(undef, n_points[])
+    ret = C_API.spir_basis_get_default_ws(basis.ptr, points)
+    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default omega points")
+    
+    return points
+end
+
+# Basis function type
+mutable struct BasisFunction
+    ptr::Ptr{spir_funcs}
+    basis::FiniteTempBasis  # Keep reference to prevent GC
+end
+
+# Evaluate basis function at single point
+function (f::BasisFunction)(x::Real)
+    out = Vector{Float64}(undef, length(f.basis))
+    status = C_API.spir_funcs_eval(f.ptr, Float64(x), out)
+    status == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate basis functions")
+    return out
+end
+
+# Evaluate basis function at Matsubara frequency (for uhat)
+function (f::BasisFunction)(n::Integer)
+    out = Vector{ComplexF64}(undef, length(f.basis))
+    status = C_API.spir_funcs_eval_matsu(f.ptr, Int64(n), out)
+    status == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate basis functions at Matsubara frequency")
+    return out
+end
+
+function (f::BasisFunction)(freq::MatsubaraFreq)
+    return f(freq.n)
+end
+
+# Evaluate at multiple points
+function (f::BasisFunction)(xs::AbstractVector{<:Real})
+    n_points = length(xs)
+    n_funcs = length(f.basis)
+    out = Matrix{Float64}(undef, n_points, n_funcs)
+    
+    # Convert to column-major format expected by C API
+    status = C_API.spir_funcs_batch_eval(f.ptr, C_API.SPIR_ORDER_COLUMN_MAJOR, 
+                                         n_points, collect(Float64, xs), vec(out))
+    status == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate basis functions at multiple points")
+    return out
+end
+
+# Evaluate at multiple Matsubara frequencies
+function (f::BasisFunction)(ns::AbstractVector{<:Integer})
+    n_points = length(ns)
+    n_funcs = length(f.basis)
+    out = Matrix{ComplexF64}(undef, n_points, n_funcs)
+    
+    # Convert to column-major format expected by C API
+    status = C_API.spir_funcs_batch_eval_matsu(f.ptr, C_API.SPIR_ORDER_COLUMN_MAJOR,
+                                               n_points, collect(Int64, ns), vec(out))
+    status == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate basis functions at multiple Matsubara frequencies")
+    return out
+end
+
+function (f::BasisFunction)(freqs::AbstractVector{<:MatsubaraFreq})
+    ns = [freq.n for freq in freqs]
+    return f(ns)
+end
+
+# Get basis functions u, v, s, uhat
+function u(basis::FiniteTempBasis)
+    status = Ref{Int32}(-100)
+    ptr = C_API.spir_basis_get_u(basis.ptr, status)
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get u basis functions")
+    funcs = BasisFunction(ptr, basis)
+    finalizer(f -> C_API.spir_funcs_release(f.ptr), funcs)
+    return funcs
+end
+
+function v(basis::FiniteTempBasis)
+    status = Ref{Int32}(-100)
+    ptr = C_API.spir_basis_get_v(basis.ptr, status)
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get v basis functions")
+    funcs = BasisFunction(ptr, basis)
+    finalizer(f -> C_API.spir_funcs_release(f.ptr), funcs)
+    return funcs
+end
+
+function s(basis::FiniteTempBasis)
+    n = length(basis)
+    svals = Vector{Float64}(undef, n)
+    status = C_API.spir_basis_get_singular_values(basis.ptr, svals)
+    status == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get singular values")
+    return svals
+end
+
+function uhat(basis::FiniteTempBasis)
+    status = Ref{Int32}(-100)
+    ptr = C_API.spir_basis_get_uhat(basis.ptr, status)
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get uhat basis functions")
+    funcs = BasisFunction(ptr, basis)
+    finalizer(f -> C_API.spir_funcs_release(f.ptr), funcs)
+    return funcs
+end
+
+# Additional utility functions
+function significance(basis::FiniteTempBasis)
+    svals = s(basis)
+    return svals / svals[1]
+end
+
+function rescale(basis::FiniteTempBasis{S}, new_beta::Real) where {S}
+    # Rescale basis to new temperature
+    new_lambda = Λ(basis) * new_beta / β(basis)
+    kernel = LogisticKernel(new_lambda)
+    return FiniteTempBasis{S}(kernel, new_beta, ωmax(basis), accuracy(basis))
+end
+
+function finite_temp_bases(beta::Real, omega_max::Real, epsilon::Real)
+    ferm_basis = FiniteTempBasis{Fermionic}(beta, omega_max, epsilon)
+    bose_basis = FiniteTempBasis{Bosonic}(beta, omega_max, epsilon)
+    return (ferm_basis, bose_basis)
+end
