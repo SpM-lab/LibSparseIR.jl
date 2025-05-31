@@ -143,10 +143,55 @@ end
         @test norm(gl_complex_reconst - gl_complex) / norm(gl_complex) < 0.1
     end
     
-    # TODO: Multi-dimensional arrays are failing with extreme errors
-    # This needs investigation - likely an issue with the C API
     @testset "Multi-dimensional arrays" begin
-        @test_skip "Multi-dimensional DLR transformations need debugging"
+        β = 100.0
+        ωmax = 10.0
+        ε = 1e-10
+        
+        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        dlr = DiscreteLehmannRepresentation(basis)
+        
+        # Test 2D array transformations
+        Random.seed!(42)
+        gl_2d = randn(length(basis), 3)
+        
+        # Transform to DLR
+        g_dlr_2d = from_IR(dlr, gl_2d)
+        @test size(g_dlr_2d) == (length(dlr), 3)
+        
+        # Transform back to IR
+        gl_2d_reconst = to_IR(dlr, g_dlr_2d)
+        @test size(gl_2d_reconst) == (length(basis), 3)
+        
+        # Check reconstruction error
+        @test norm(gl_2d_reconst - gl_2d) / norm(gl_2d) < 0.1
+        
+        # Test with different dimension
+        gl_2d_dim2 = randn(5, length(basis))
+        g_dlr_2d_dim2 = from_IR(dlr, gl_2d_dim2; dim=2)
+        @test size(g_dlr_2d_dim2) == (5, length(dlr))
+        
+        gl_2d_dim2_reconst = to_IR(dlr, g_dlr_2d_dim2; dim=2)
+        @test size(gl_2d_dim2_reconst) == (5, length(basis))
+        @test norm(gl_2d_dim2_reconst - gl_2d_dim2) / norm(gl_2d_dim2) < 0.1
+        
+        # Test 3D array transformations
+        gl_3d = randn(length(basis), 2, 4)
+        g_dlr_3d = from_IR(dlr, gl_3d)
+        @test size(g_dlr_3d) == (length(dlr), 2, 4)
+        
+        gl_3d_reconst = to_IR(dlr, g_dlr_3d)
+        @test size(gl_3d_reconst) == (length(basis), 2, 4)
+        @test norm(gl_3d_reconst - gl_3d) / norm(gl_3d) < 0.1
+        
+        # Test complex arrays
+        gl_complex_2d = randn(ComplexF64, length(basis), 3)
+        g_dlr_complex_2d = from_IR(dlr, gl_complex_2d)
+        @test eltype(g_dlr_complex_2d) == ComplexF64
+        @test size(g_dlr_complex_2d) == (length(dlr), 3)
+        
+        gl_complex_2d_reconst = to_IR(dlr, g_dlr_complex_2d)
+        @test norm(gl_complex_2d_reconst - gl_complex_2d) / norm(gl_complex_2d) < 0.1
     end
     
     @testset "Error handling" begin
