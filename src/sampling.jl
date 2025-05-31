@@ -193,6 +193,8 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, coeffs:
     # Call appropriate C function based on input/output types
     if Tin <: Real && Tout <: Real
         ret = C_API.spir_sampling_eval_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
+    elseif Tin <: Complex && Tout <: Complex
+        ret = C_API.spir_sampling_eval_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
     else
         error("Type combination not yet supported for TauSampling: input=$Tin, output=$Tout")
     end
@@ -282,6 +284,8 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, values::Abst
     # Call appropriate C function
     if Tin <: Real && Tout <: Real
         ret = C_API.spir_sampling_fit_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, output)
+    elseif Tin <: Complex && Tout <: Complex
+        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, output)
     else
         error("Type combination not yet supported for TauSampling fit: input=$Tin, output=$Tout")
     end
