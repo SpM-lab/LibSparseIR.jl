@@ -2,6 +2,13 @@
 
 Julia interface for libsparseir
 
+> [!WARNING]
+> This Julia project is still under construction. Please use other repositories:
+> - https://github.com/SpM-lab/sparse-ir
+> - https://github.com/SpM-lab/SparseIR.jl
+> - https://github.com/SpM-lab/sparse-ir-fortran
+
+
 ## Set up
 
 1. Install Julia
