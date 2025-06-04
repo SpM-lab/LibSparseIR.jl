@@ -279,6 +279,33 @@ function spir_funcs_get_size(funcs, size)
 end
 
 """
+    spir_funcs_get_slice(funcs, nslice, indices, status)
+
+Creates a new function object containing a subset of functions from the input.
+
+This function creates a new function object that contains only the functions specified by the indices array. The indices must be valid (within range and no duplicates).
+
+!!! note
+
+    The caller is responsible for freeing the returned object using spir\\_funcs\\_free
+
+!!! note
+
+    If status is non-zero, the returned pointer will be NULL
+
+# Arguments
+* `funcs`: Pointer to the source function object
+* `nslice`: Number of functions to select (length of indices array)
+* `indices`: Array of indices specifying which functions to include in the slice
+* `status`: Pointer to store the status code (0 for success, non-zero for error)
+# Returns
+Pointer to the new function object containing the selected functions, or NULL on error
+"""
+function spir_funcs_get_slice(funcs, nslice, indices, status)
+    ccall((:spir_funcs_get_slice, libsparseir), Ptr{spir_funcs}, (Ptr{spir_funcs}, Cint, Ptr{Cint}, Ptr{Cint}), funcs, nslice, indices, status)
+end
+
+"""
     spir_funcs_eval(funcs, x, out)
 
 Evaluates functions at a single point in the imaginary-time domain or the real frequency domain.
@@ -414,6 +441,33 @@ An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A 
 """
 function spir_basis_get_size(b, size)
     ccall((:spir_basis_get_size, libsparseir), Cint, (Ptr{spir_basis}, Ptr{Cint}), b, size)
+end
+
+"""
+    spir_basis_get_svals(b, svals)
+
+Gets the singular values of a finite temperature basis.
+
+This function returns the singular values of the specified finite temperature basis object. The singular values are the square roots of the eigenvalues of the covariance matrix of the basis functions.
+
+!!! note
+
+    The singular values are ordered in descending order
+
+!!! note
+
+    The number of singular values is equal to the basis size
+
+# Arguments
+* `sve`: Pointer to the finite temperature basis object
+* `svals`: Pointer to store the singular values
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A non-zero error code on failure
+# See also
+[`spir_basis_get_size`](@ref)
+"""
+function spir_basis_get_svals(b, svals)
+    ccall((:spir_basis_get_svals, libsparseir), Cint, (Ptr{spir_basis}, Ptr{Cdouble}), b, svals)
 end
 
 """
