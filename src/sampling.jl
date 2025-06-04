@@ -51,12 +51,15 @@ end
 # Convenience constructors
 
 """
-    TauSampling(basis::AbstractBasis; sampling_points=nothing)
+    TauSampling(basis::AbstractBasis; sampling_points=nothing, factorize=true)
 
 Construct a `TauSampling` object from a basis. If `sampling_points` is not provided,
 the default tau sampling points from the basis are used.
+
+The `factorize` parameter matches SparseIR.jl interface but is currently ignored
+as factorization is handled internally by the C API.
 """
-function TauSampling(basis::AbstractBasis; sampling_points=nothing)
+function TauSampling(basis::AbstractBasis; sampling_points=nothing, factorize=true)
     if sampling_points === nothing
         # Get default tau sampling points from basis
         status = Ref{Int32}(-100)
@@ -74,6 +77,9 @@ function TauSampling(basis::AbstractBasis; sampling_points=nothing)
         sampling_points = collect(Float64, sampling_points)
     end
     
+    # Note: factorize parameter is currently ignored as the C API handles factorization internally
+    # TODO: Add support for factorize parameter in future versions
+    
     status = Ref{Int32}(-100)
     sampling_ptr = C_API.spir_tau_sampling_new(basis.ptr, length(sampling_points), sampling_points, status)
     status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create tau sampling: status=$(status[])")
@@ -83,14 +89,16 @@ function TauSampling(basis::AbstractBasis; sampling_points=nothing)
 end
 
 """
-    MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing)
+    MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing, factorize=true)
 
 Construct a `MatsubaraSampling` object from a basis. If `sampling_points` is not provided,
 the default Matsubara sampling points from the basis are used.
 
 If `positive_only=true`, assumes functions are symmetric in Matsubara frequency.
+The `factorize` parameter matches SparseIR.jl interface but is currently ignored
+as factorization is handled internally by the C API.
 """
-function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing)
+function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing, factorize=true)
     if sampling_points === nothing
         # Get default Matsubara sampling points from basis
         status = Ref{Int32}(-100)
@@ -121,6 +129,9 @@ function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_p
     # Extract indices for C API
     indices = [Int64(Int(p)) for p in sampling_points]
     
+    # Note: factorize parameter is currently ignored as the C API handles factorization internally
+    # TODO: Add support for factorize parameter in future versions
+    
     status = Ref{Int32}(-100)
     sampling_ptr = C_API.spir_matsu_sampling_new(basis.ptr, positive_only, length(indices), indices, status)
     status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create Matsubara sampling: status=$(status[])")
@@ -148,15 +159,15 @@ end
 # Evaluation and fitting functions
 
 """
-    evaluate(sampling::AbstractSampling, coeffs::AbstractArray; dim=1)
+    evaluate(sampling::AbstractSampling, al::AbstractArray; dim=1)
 
 Evaluate basis coefficients at the sampling points using the C API.
 
 For multidimensional arrays, `dim` specifies which dimension corresponds to the basis coefficients.
 """
-function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, coeffs::AbstractArray{T,N}; dim=1) where {T,N}
+function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractArray{T,N}; dim=1) where {T,N}
     # Determine output dimensions
-    output_dims = collect(size(coeffs))
+    output_dims = collect(size(al))
     output_dims[dim] = npoints(sampling)
     
     # Determine output type based on sampling type
@@ -164,38 +175,38 @@ function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, coeffs::Abstra
         # For complex input, TauSampling should produce complex output
         output_type = T
         output = Array{output_type,N}(undef, output_dims...)
-        evaluate!(output, sampling, coeffs; dim=dim)
+        evaluate!(output, sampling, al; dim=dim)
     else # MatsubaraSampling
         output_type = T <: Real ? ComplexF64 : promote_type(ComplexF64, T)
         output = Array{output_type,N}(undef, output_dims...)
-        evaluate!(output, sampling, coeffs; dim=dim)
+        evaluate!(output, sampling, al; dim=dim)
     end
     
     return output
 end
 
 """
-    evaluate!(output::AbstractArray, sampling::AbstractSampling, coeffs::AbstractArray; dim=1)
+    evaluate!(output::AbstractArray, sampling::AbstractSampling, al::AbstractArray; dim=1)
 
 In-place version of [`evaluate`](@ref). Write results to the pre-allocated `output` array.
 """
-function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, coeffs::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
-    expected_dims = collect(size(coeffs))
+    expected_dims = collect(size(al))
     expected_dims[dim] = npoints(sampling)
     size(output) == tuple(expected_dims...) || throw(DimensionMismatch("Output array has wrong dimensions"))
     
     # Prepare arguments for C API
     ndim = N
-    input_dims = Int32[size(coeffs)...]
+    input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     # Call appropriate C function based on input/output types
     if Tin <: Real && Tout <: Real
-        ret = C_API.spir_sampling_eval_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
+        ret = C_API.spir_sampling_eval_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     elseif Tin <: Complex && Tout <: Complex
-        ret = C_API.spir_sampling_eval_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
+        ret = C_API.spir_sampling_eval_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     else
         error("Type combination not yet supported for TauSampling: input=$Tin, output=$Tout")
     end
@@ -204,23 +215,23 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, coeffs:
     return output
 end
 
-function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, coeffs::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions  
-    expected_dims = collect(size(coeffs))
+    expected_dims = collect(size(al))
     expected_dims[dim] = npoints(sampling)
     size(output) == tuple(expected_dims...) || throw(DimensionMismatch("Output array has wrong dimensions"))
     
     # Prepare arguments for C API
     ndim = N
-    input_dims = Int32[size(coeffs)...]
+    input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     # Call appropriate C function based on input/output types
     if Tin <: Real && Tout <: Complex
-        ret = C_API.spir_sampling_eval_dz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
+        ret = C_API.spir_sampling_eval_dz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     elseif Tin <: Complex && Tout <: Complex
-        ret = C_API.spir_sampling_eval_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, coeffs, output)
+        ret = C_API.spir_sampling_eval_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     else
         error("Type combination not supported for MatsubaraSampling: input=$Tin, output=$Tout")
     end
@@ -230,15 +241,15 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, c
 end
 
 """
-    fit(sampling::AbstractSampling, values::AbstractArray; dim=1)
+    fit(sampling::AbstractSampling, al::AbstractArray; dim=1)
 
 Fit basis coefficients from values at sampling points using the C API.
 
 For multidimensional arrays, `dim` specifies which dimension corresponds to the sampling points.
 """
-function fit(sampling::Union{TauSampling,MatsubaraSampling}, values::AbstractArray{T,N}; dim=1) where {T,N}
+function fit(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractArray{T,N}; dim=1) where {T,N}
     # Determine output dimensions
-    output_dims = collect(size(values))
+    output_dims = collect(size(al))
     output_dims[dim] = length(sampling.basis)
     
     # Determine output type - typically real for coefficients 
@@ -252,7 +263,7 @@ function fit(sampling::Union{TauSampling,MatsubaraSampling}, values::AbstractArr
     end
     
     output = Array{output_type,N}(undef, output_dims...)
-    fit!(output, sampling, values; dim=dim)
+    fit!(output, sampling, al; dim=dim)
     
     # For MatsubaraSampling, if we want real coefficients, extract real part
     if sampling isa MatsubaraSampling && T <: Complex && output_type <: Complex
@@ -267,27 +278,27 @@ function fit(sampling::Union{TauSampling,MatsubaraSampling}, values::AbstractArr
 end
 
 """
-    fit!(output::AbstractArray, sampling::AbstractSampling, values::AbstractArray; dim=1)
+    fit!(output::AbstractArray, sampling::AbstractSampling, al::AbstractArray; dim=1)
 
 In-place version of [`fit`](@ref). Write results to the pre-allocated `output` array.
 """
-function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, values::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
-    expected_dims = collect(size(values))
+    expected_dims = collect(size(al))
     expected_dims[dim] = length(sampling.basis)
     size(output) == tuple(expected_dims...) || throw(DimensionMismatch("Output array has wrong dimensions"))
     
     # Prepare arguments for C API
     ndim = N
-    input_dims = Int32[size(values)...]
+    input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     # Call appropriate C function
     if Tin <: Real && Tout <: Real
-        ret = C_API.spir_sampling_fit_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, output)
+        ret = C_API.spir_sampling_fit_dd(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     elseif Tin <: Complex && Tout <: Complex
-        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, output)
+        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     else
         error("Type combination not yet supported for TauSampling fit: input=$Tin, output=$Tout")
     end
@@ -296,26 +307,26 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, values::Abst
     return output
 end
 
-function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, values::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
-    expected_dims = collect(size(values))
+    expected_dims = collect(size(al))
     expected_dims[dim] = length(sampling.basis)
     size(output) == tuple(expected_dims...) || throw(DimensionMismatch("Output array has wrong dimensions"))
     
     # Prepare arguments for C API
     ndim = N
-    input_dims = Int32[size(values)...]
+    input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     # Call appropriate C function based on input/output types
     if Tin <: Complex && Tout <: Complex
         # Use complex-to-complex API and then extract real part if needed
-        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, output)
+        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, output)
     elseif Tin <: Complex && Tout <: Real
         # Create temporary complex output, then extract real part
         temp_output = Array{ComplexF64,N}(undef, size(output)...)
-        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, values, temp_output)
+        ret = C_API.spir_sampling_fit_zz(sampling.sampling_ptr, order, ndim, input_dims, target_dim, al, temp_output)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to fit sampling: status=$ret")
         output .= real.(temp_output)
         return output

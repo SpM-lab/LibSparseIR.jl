@@ -10,7 +10,7 @@
         ωmax = 1.0
         ε = 1e-12
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         dlr = DiscreteLehmannRepresentation(basis)
         
         @test dlr isa DiscreteLehmannRepresentation
@@ -38,7 +38,7 @@
         ωmax = 1.0
         ε = 1e-12
         
-        basis = FiniteTempBasis{Bosonic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Bosonic(), β, ωmax, ε)
         
         # Get default poles and use them as custom poles
         default_poles = default_omega_sampling_points(basis)
@@ -77,7 +77,7 @@
         ωmax = 10.0
         ε = 1e-10
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         dlr = DiscreteLehmannRepresentation(basis)
         
         # Should inherit from underlying basis
@@ -134,7 +134,7 @@ end
         ωmax = 10.0
         ε = 1e-10
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         dlr = DiscreteLehmannRepresentation(basis)
         
         Random.seed!(123)
@@ -159,7 +159,7 @@ end
         ωmax = 10.0
         ε = 1e-10
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         dlr = DiscreteLehmannRepresentation(basis)
         
         # Test 2D array transformations
@@ -179,10 +179,10 @@ end
         
         # Test with different dimension
         gl_2d_dim2 = randn(5, length(basis))
-        g_dlr_2d_dim2 = from_IR(dlr, gl_2d_dim2; dim=2)
+        g_dlr_2d_dim2 = from_IR(dlr, gl_2d_dim2, 2)
         @test size(g_dlr_2d_dim2) == (5, length(dlr))
         
-        gl_2d_dim2_reconst = to_IR(dlr, g_dlr_2d_dim2; dim=2)
+        gl_2d_dim2_reconst = to_IR(dlr, g_dlr_2d_dim2, 2)
         @test size(gl_2d_dim2_reconst) == (5, length(basis))
         @test norm(gl_2d_dim2_reconst - gl_2d_dim2) / norm(gl_2d_dim2) < 0.1
         
@@ -210,7 +210,7 @@ end
         ωmax = 1.0
         ε = 1e-12
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         dlr = DiscreteLehmannRepresentation(basis)
         
         # Test dimension mismatch for from_IR
@@ -223,9 +223,9 @@ end
         
         # Test multi-dimensional mismatch
         gl_2d = randn(length(basis), 5)
-        g_dlr_2d = from_IR(dlr, gl_2d; dim=1)
-        @test_throws DimensionMismatch from_IR(dlr, gl_2d; dim=2)  # Wrong dimension
-        @test_throws DimensionMismatch to_IR(dlr, g_dlr_2d; dim=2)  # Wrong dimension
+        g_dlr_2d = from_IR(dlr, gl_2d, 1)
+        @test_throws DimensionMismatch from_IR(dlr, gl_2d, 2)  # Wrong dimension
+        @test_throws DimensionMismatch to_IR(dlr, g_dlr_2d, 2)  # Wrong dimension
     end
 end
 
@@ -263,8 +263,7 @@ end
         
         # Comparison on Matsubara frequencies
         smpl = MatsubaraSampling(basis)
-        smpl_for_dlr = MatsubaraSampling(dlr; 
-                                        sampling_points=sampling_points(smpl))
+        smpl_for_dlr = MatsubaraSampling(dlr; sampling_points=sampling_points(smpl))
         
         giv_ref = evaluate(smpl, Gl)
         giv = evaluate(smpl_for_dlr, g_dlr)
@@ -288,7 +287,7 @@ end
         ωmax = 21.0
         ε = 1e-7
         
-        basis_b = FiniteTempBasis{Bosonic}(β, ωmax, ε)
+        basis_b = FiniteTempBasis(Bosonic(), β, ωmax, ε)
         
         # G(iw) = sum_p coeff_p / (iw - omega_p)
         coeff = [1.1, 2.0]
@@ -315,7 +314,7 @@ end
         ωmax = 5.0
         ε = 1e-10
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         
         # Test default pole selection
         default_poles = default_omega_sampling_points(basis)
@@ -367,7 +366,7 @@ end
         ωmax = 1.0
         ε = 1e-3
         
-        basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
         @test length(basis) < 20  # Should be small
         
         dlr = DiscreteLehmannRepresentation(basis)

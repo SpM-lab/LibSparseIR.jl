@@ -6,7 +6,7 @@
 
     @testset "Constructor" begin
         # Create basis
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-15)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-15)
         
         # Test default constructor
         tau_sampling = TauSampling(basis)
@@ -28,7 +28,7 @@
     end
     
     @testset "Evaluate and Fit 1D" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         Random.seed!(42)
@@ -56,7 +56,7 @@
     
     @testset "Complex coefficients for TauSampling" begin
         # Test complex->complex transformation (like C++ test)
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         Random.seed!(42)
@@ -84,7 +84,7 @@
     end
     
     @testset "Multi-dimensional arrays" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         Random.seed!(123)
@@ -111,7 +111,7 @@
     
     @testset "4D arrays (like C++ tests)" begin
         # Test with 4D arrays like the C++ tests
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         Random.seed!(42)
@@ -144,7 +144,7 @@
     end
     
     @testset "Error handling" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         # Test dimension mismatch - C API returns error codes
@@ -157,7 +157,7 @@
     
     @testset "API consistency checks" begin
         # Test that tau sampling doesn't support getting Matsubara frequencies
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         tau_sampling = TauSampling(basis)
         
         # In Julia, we don't have direct access to C API error codes, 
@@ -177,7 +177,7 @@ end
 
     @testset "Constructor" begin
         # Test fermionic case
-        basis_f = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-15)
+        basis_f = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-15)
         
         # Default constructor
         matsu_sampling = MatsubaraSampling(basis_f)
@@ -198,7 +198,7 @@ end
         @test all(Int(p) >= 0 for p in sampling_points(matsu_sampling_pos))
         
         # Test bosonic case
-        basis_b = FiniteTempBasis{Bosonic}(1.0, 10.0, 1e-15)
+        basis_b = FiniteTempBasis(Bosonic(), 1.0, 10.0, 1e-15)
         matsu_sampling_b = MatsubaraSampling(basis_b)
         @test all(p isa BosonicFreq for p in sampling_points(matsu_sampling_b))
         
@@ -210,7 +210,7 @@ end
     end
     
     @testset "Evaluate and Fit 1D" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         matsu_sampling = MatsubaraSampling(basis)
         
         Random.seed!(42)
@@ -238,7 +238,7 @@ end
     end
     
     @testset "Complex coefficients" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         matsu_sampling = MatsubaraSampling(basis)
         
         Random.seed!(42)
@@ -257,7 +257,7 @@ end
     end
     
     @testset "Multi-dimensional arrays" begin
-        basis = FiniteTempBasis{Fermionic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 10.0, 1e-10)
         matsu_sampling = MatsubaraSampling(basis)
         
         Random.seed!(456)
@@ -285,7 +285,7 @@ end
     
     @testset "4D arrays with positive_only (like C++ tests)" begin
         # Test with 4D arrays including positive_only option
-        basis = FiniteTempBasis{Bosonic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Bosonic(), 1.0, 10.0, 1e-10)
         
         for positive_only in [false, true]
             matsu_sampling = MatsubaraSampling(basis; positive_only=positive_only)
@@ -330,7 +330,7 @@ end
     end
     
     @testset "positive_only behavior" begin
-        basis = FiniteTempBasis{Bosonic}(1.0, 10.0, 1e-10)
+        basis = FiniteTempBasis(Bosonic(), 1.0, 10.0, 1e-10)
         
         # Full sampling
         full_sampling = MatsubaraSampling(basis; positive_only=false)
@@ -365,8 +365,8 @@ end
         eps = 1e-10
         
         # Create both types of bases
-        basis_f = FiniteTempBasis{Fermionic}(beta, wmax, eps)
-        basis_b = FiniteTempBasis{Bosonic}(beta, wmax, eps)
+        basis_f = FiniteTempBasis(Fermionic(), beta, wmax, eps)
+        basis_b = FiniteTempBasis(Bosonic(), beta, wmax, eps)
         
         # Create samplings
         tau_f = TauSampling(basis_f)
@@ -416,7 +416,7 @@ end
     
     @testset "Small basis" begin
         # Test with very small basis
-        basis = FiniteTempBasis{Fermionic}(1.0, 1.0, 1e-3)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 1.0, 1e-3)
         @test length(basis) < 10  # Should be small
         
         tau_sampling = TauSampling(basis)
@@ -436,7 +436,7 @@ end
     
     @testset "High precision" begin
         # Test with high precision requirement
-        basis = FiniteTempBasis{Fermionic}(1.0, 100.0, 1e-14)
+        basis = FiniteTempBasis(Fermionic(), 1.0, 100.0, 1e-14)
         
         tau_sampling = TauSampling(basis)
         matsu_sampling = MatsubaraSampling(basis)

@@ -74,14 +74,14 @@ end
         eps = 1e-10
         
         # Fermionic basis
-        basis_f = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+        basis_f = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
         @test basis_f isa FiniteTempBasis{Fermionic}
         @test basis_f.beta == beta
         @test basis_f.eps == eps
         @test length(basis_f) > 0
         
         # Bosonic basis
-        basis_b = FiniteTempBasis{Bosonic}(beta, omega_max, eps)
+        basis_b = FiniteTempBasis(Bosonic(), beta, omega_max, eps)
         @test basis_b isa FiniteTempBasis{Bosonic}
         @test basis_b.beta == beta
         @test basis_b.eps == eps
@@ -93,7 +93,7 @@ end
     end
     
     @testset "Size and indexing" begin
-        basis = FiniteTempBasis{Fermionic}(10.0, 1.0, 1e-10)
+        basis = FiniteTempBasis(Fermionic(), 10.0, 1.0, 1e-10)
         n = length(basis)
         
         @test size(basis) == (n,)
@@ -122,7 +122,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "Singular values" begin
         @test_skip begin
@@ -184,7 +184,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "significance and accuracy" begin
         sig = significance(basis)
@@ -228,7 +228,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "tau sampling points" begin
         tau_points = default_tau_sampling_points(basis)
@@ -264,7 +264,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "Default tau sampling" begin
         tau_smpl = TauSampling(basis)
@@ -317,7 +317,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "Default Matsubara sampling" begin
         matsu_smpl = MatsubaraSampling(basis)
@@ -403,7 +403,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "Basic overlap" begin
         # Skip tests that depend on s() until C library function is available
@@ -456,7 +456,7 @@ end
     beta = 10.0
     omega_max = 1.0
     eps = 1e-10
-    basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+    basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
     
     @testset "DLR construction" begin
         dlr = DiscreteLehmannRepresentation(basis)
@@ -545,7 +545,7 @@ end
         beta = 10.0
         omega_max = 1.0
         eps = 1e-10
-        basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+        basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
         
         aug_basis = LibSparseIR.AugmentedBasis(basis, TauConst())
         @test aug_basis isa LibSparseIR.AugmentedBasis
@@ -590,7 +590,7 @@ end
         beta = 10.0
         omega_max = 1.0
         eps = 1e-10
-        basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+        basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
         
         # Create samplings
         tau_smpl = TauSampling(basis)
@@ -703,7 +703,7 @@ end
         beta = 10.0
         omega_max = 1.0
         eps = 1e-10
-        basis = FiniteTempBasis{Fermionic}(beta, omega_max, eps)
+        basis = FiniteTempBasis(Fermionic(), beta, omega_max, eps)
         
         tau_smpl = TauSampling(basis)
         matsu_smpl = MatsubaraSampling(basis)
@@ -757,7 +757,7 @@ end
         epsilon = 1e-6
 
         # Fermionic
-        basis_f = FiniteTempBasis{Fermionic}(beta, wmax, epsilon)
+        basis_f = FiniteTempBasis(Fermionic(), beta, wmax, epsilon)
         @test basis_f isa FiniteTempBasis{Fermionic}
         @test β(basis_f) == beta
         @test ωmax(basis_f) == wmax
@@ -766,7 +766,7 @@ end
         @test Λ(basis_f) ≈ beta * wmax
 
         # Bosonic
-        basis_b = FiniteTempBasis{Bosonic}(beta, wmax, epsilon)
+        basis_b = FiniteTempBasis(Bosonic(), beta, wmax, epsilon)
         @test basis_b isa FiniteTempBasis{Bosonic}
         @test β(basis_b) == beta
         @test ωmax(basis_b) == wmax
@@ -783,18 +783,18 @@ end
 
         # Test with LogisticKernel for Fermionic
         kernel = LogisticKernel(Lambda)
-        basis_f = FiniteTempBasis{Fermionic}(kernel, beta, wmax, epsilon)
+        basis_f = FiniteTempBasis(Fermionic(), kernel, beta, wmax, epsilon)
         @test basis_f isa FiniteTempBasis{Fermionic}
         @test statistics(basis_f) isa Fermionic
 
         # Test with LogisticKernel for Bosonic
-        basis_b = FiniteTempBasis{Bosonic}(kernel, beta, wmax, epsilon)
+        basis_b = FiniteTempBasis(Bosonic(), kernel, beta, wmax, epsilon)
         @test basis_b isa FiniteTempBasis{Bosonic}
         @test statistics(basis_b) isa Bosonic
 
         # Test with RegularizedBoseKernel
         kernel_reg = RegularizedBoseKernel(Lambda)
-        basis_reg = FiniteTempBasis{Bosonic}(kernel_reg, beta, wmax, epsilon)
+        basis_reg = FiniteTempBasis(Bosonic(), kernel_reg, beta, wmax, epsilon)
         @test basis_reg isa FiniteTempBasis{Bosonic}
         @test statistics(basis_reg) isa Bosonic
     end
@@ -823,7 +823,7 @@ end
         sizes = Int[]
         
         for eps in eps_values
-            basis = FiniteTempBasis{Fermionic}(beta, wmax, eps)
+            basis = FiniteTempBasis(Fermionic(), beta, wmax, eps)
             push!(sizes, length(basis))
         end
         
@@ -844,9 +844,9 @@ end
 
         # Create basis
         basis = if statistics_type == :fermionic
-            FiniteTempBasis{Fermionic}(beta, wmax, epsilon)
+            FiniteTempBasis(Fermionic(), beta, wmax, epsilon)
         else
-            FiniteTempBasis{Bosonic}(beta, wmax, epsilon)
+            FiniteTempBasis(Bosonic(), beta, wmax, epsilon)
         end
 
         n = length(basis)
@@ -957,7 +957,7 @@ end
         beta = 2.0
         wmax = 5.0
         epsilon = 1e-6
-        basis = FiniteTempBasis{Fermionic}(beta, wmax, epsilon)
+        basis = FiniteTempBasis(Fermionic(), beta, wmax, epsilon)
 
         # Skip singular value tests until C library function is available
         @test_skip begin

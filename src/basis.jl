@@ -39,9 +39,39 @@ mutable struct FiniteTempBasis{S} <: AbstractBasis{S}
 	end
 end
 
-# Convenience constructor
-function FiniteTempBasis(stat::S, β::Real, ωmax::Real, ε::Real) where {S<:Statistics}
+# Convenience constructor - matches SparseIR.jl signature
+function FiniteTempBasis(stat::S, β::Real, ωmax::Real, ε=nothing; max_size=nothing, kernel=nothing, sve_result=nothing) where {S<:Statistics}
+    # Handle optional ε parameter like SparseIR.jl
+    if ε === nothing
+        # Use default epsilon
+        ε = 1e-10  # Same default as in SparseIR.jl
+    end
+    
+    # Note: max_size, kernel, and sve_result parameters are currently ignored
+    # as the C API handles these internally
+    # TODO: Add support for these parameters in future versions
+    
     FiniteTempBasis{typeof(stat)}(β, ωmax, ε)
+end
+
+# Constructor with explicit kernel parameter - matches SparseIR.jl signature
+function FiniteTempBasis(stat::S, kernel::AbstractKernel, β::Real, ωmax::Real, ε=nothing; max_size=nothing, sve_result=nothing) where {S<:Statistics}
+    # Validate RegularizedBoseKernel can only be used with Bosonic statistics
+    if kernel isa RegularizedBoseKernel && stat isa Fermionic
+        throw(ArgumentError("RegularizedBoseKernel does not support fermionic functions"))
+    end
+    
+    # Handle optional ε parameter like SparseIR.jl
+    if ε === nothing
+        # Use default epsilon
+        ε = 1e-10  # Same default as in SparseIR.jl
+    end
+    
+    # Note: max_size and sve_result parameters are currently ignored
+    # as the C API handles these internally
+    # TODO: Add support for these parameters in future versions
+    
+    FiniteTempBasis{typeof(stat)}(kernel, β, ωmax, ε)
 end
 
 # Override the length function from abstract.jl to work with our C API
@@ -209,8 +239,17 @@ function rescale(basis::FiniteTempBasis{S}, new_beta::Real) where {S}
     return FiniteTempBasis{S}(kernel, new_beta, ωmax(basis), accuracy(basis))
 end
 
-function finite_temp_bases(beta::Real, omega_max::Real, epsilon::Real)
-    ferm_basis = FiniteTempBasis{Fermionic}(beta, omega_max, epsilon)
-    bose_basis = FiniteTempBasis{Bosonic}(beta, omega_max, epsilon)
+function finite_temp_bases(β::Real, ωmax::Real, ε=nothing; kernel=nothing, sve_result=nothing)
+    # Handle optional ε parameter like SparseIR.jl
+    if ε === nothing
+        ε = 1e-10  # Default epsilon value
+    end
+    
+    # Note: kernel and sve_result parameters are currently ignored
+    # as the C API handles these internally
+    # TODO: Add support for these parameters in future versions
+    
+    ferm_basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
+    bose_basis = FiniteTempBasis{Bosonic}(β, ωmax, ε)
     return (ferm_basis, bose_basis)
 end

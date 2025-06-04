@@ -110,25 +110,25 @@ iswellconditioned(::DiscreteLehmannRepresentation) = false
 basis(dlr::DiscreteLehmannRepresentation) = dlr.basis
 
 """
-    from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray; dim=1)
+    from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray, dims=1)
 
 Transform from IR basis coefficients to DLR coefficients.
 
 # Arguments
 - `dlr`: The DLR basis
 - `gl`: IR basis coefficients
-- `dim`: Dimension along which the basis coefficients are stored
+- `dims`: Dimension along which the basis coefficients are stored
 
 # Returns
-DLR coefficients with the same shape as input, but with size `length(dlr)` along dimension `dim`.
+DLR coefficients with the same shape as input, but with size `length(dlr)` along dimension `dims`.
 """
-function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}; dim=1) where {T,N}
+function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}, dims=1) where {T,N}
     # Check dimensions
-    size(gl, dim) == length(dlr.basis) || throw(DimensionMismatch("Input array has wrong size along dimension $dim"))
+    size(gl, dims) == length(dlr.basis) || throw(DimensionMismatch("Input array has wrong size along dimension $dims"))
     
     # Prepare output dimensions
     output_dims = collect(size(gl))
-    output_dims[dim] = length(dlr)
+    output_dims[dims] = length(dlr)
     
     # Determine output type
     output_type = T
@@ -137,7 +137,7 @@ function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}; dim
     # Call appropriate C function
     ndim = N
     input_dims = Int32[size(gl)...]
-    target_dim = Int32(dim - 1)  # C uses 0-based indexing
+    target_dim = Int32(dims - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     if T <: Real
@@ -153,25 +153,25 @@ function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}; dim
 end
 
 """
-    to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray; dim=1)
+    to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray, dims=1)
 
 Transform from DLR coefficients to IR basis coefficients.
 
 # Arguments
 - `dlr`: The DLR basis
 - `g_dlr`: DLR coefficients
-- `dim`: Dimension along which the DLR coefficients are stored
+- `dims`: Dimension along which the DLR coefficients are stored
 
 # Returns
-IR basis coefficients with the same shape as input, but with size `length(dlr.basis)` along dimension `dim`.
+IR basis coefficients with the same shape as input, but with size `length(dlr.basis)` along dimension `dims`.
 """
-function to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray{T,N}; dim=1) where {T,N}
+function to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray{T,N}, dims=1) where {T,N}
     # Check dimensions
-    size(g_dlr, dim) == length(dlr) || throw(DimensionMismatch("Input array has wrong size along dimension $dim"))
+    size(g_dlr, dims) == length(dlr) || throw(DimensionMismatch("Input array has wrong size along dimension $dims"))
     
     # Prepare output dimensions
     output_dims = collect(size(g_dlr))
-    output_dims[dim] = length(dlr.basis)
+    output_dims[dims] = length(dlr.basis)
     
     # Determine output type
     output_type = T
@@ -180,7 +180,7 @@ function to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray{T,N}; di
     # Call appropriate C function
     ndim = N
     input_dims = Int32[size(g_dlr)...]
-    target_dim = Int32(dim - 1)  # C uses 0-based indexing
+    target_dim = Int32(dims - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
     
     if T <: Real

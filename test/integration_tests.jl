@@ -58,7 +58,7 @@
 
         # IR basis
         kernel = K(beta * wmax)
-        basis = FiniteTempBasis{S}(kernel, beta, wmax, epsilon)
+        basis = FiniteTempBasis(S(), kernel, beta, wmax, epsilon)
         basis_size = length(basis)
 
         # Tau Sampling
@@ -74,8 +74,7 @@
         @info "Matsubara sampling"
         matsubara_points = LibSparseIR.default_matsubara_sampling_points(basis; positive_only=positive_only)
         num_matsubara_points = length(matsubara_points)
-        matsubara_sampling = MatsubaraSampling(basis; positive_only=positive_only,
-                                              sampling_points=matsubara_points)
+        matsubara_sampling = MatsubaraSampling(basis; positive_only=positive_only, sampling_points=matsubara_points)
 
         if positive_only
             @assert num_matsubara_points >= basis_size ÷ 2
@@ -110,8 +109,7 @@
 
         # DLR sampling objects
         tau_sampling_dlr = TauSampling(dlr; sampling_points=tau_points)
-        matsubara_sampling_dlr = MatsubaraSampling(dlr; positive_only=positive_only,
-                                                   sampling_points=matsubara_points)
+        matsubara_sampling_dlr = MatsubaraSampling(dlr; positive_only=positive_only, sampling_points=matsubara_points)
 
         # Move the axis for the poles from the first to the target dimension
         perm = collect(1:ndim)
@@ -119,10 +117,10 @@
         coeffs = permutedims(coeffs_targetdim0, perm)
 
         # Convert DLR coefficients to IR coefficients
-        g_IR = LibSparseIR.to_IR(dlr, coeffs; dim=target_dim + 1)  # Julia is 1-indexed
+        g_IR = LibSparseIR.to_IR(dlr, coeffs, target_dim + 1)  # Julia is 1-indexed
 
         # Convert IR coefficients back to DLR coefficients
-        g_DLR_reconst = LibSparseIR.from_IR(dlr, g_IR; dim=target_dim + 1)
+        g_DLR_reconst = LibSparseIR.from_IR(dlr, g_IR, target_dim + 1)
 
         # Compare the Greens function at all tau points between IR and DLR
         # Instead of using basis functions directly, we'll use the sampling objects
