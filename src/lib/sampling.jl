@@ -297,7 +297,7 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abstract
     elseif Tin <: Complex && Tout <: Complex
         ret = C_API.spir_sampling_fit_zz(sampling.ptr, order, ndim, input_dims, target_dim, al, output)
     else
-        error("Type combination not yet supported for TauSampling fit: input=$Tin, output=$Tout")
+        ArgumentError("Type combination not yet supported for TauSampling fit: input=$Tin, output=$Tout")
     end
 
     ret in [
@@ -319,7 +319,6 @@ function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::Ab
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
-    println("Tin: $Tin, Tout: $Tout")
     # Call appropriate C function based on input/output types
     if Tin <: Complex && Tout <: Complex
         # Use complex-to-complex API and then extract real part if needed
