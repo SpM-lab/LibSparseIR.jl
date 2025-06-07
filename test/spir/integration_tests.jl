@@ -75,13 +75,12 @@
         matsubara_points = LibSparseIR.default_matsubara_sampling_points(basis; positive_only=positive_only)
         num_matsubara_points = length(matsubara_points)
         matsubara_sampling = MatsubaraSampling(basis; positive_only=positive_only, sampling_points=matsubara_points)
-
         if positive_only
             @assert num_matsubara_points >= basis_size ÷ 2
         else
             @assert num_matsubara_points >= basis_size
         end
-        @assert matsubara_sampling.sampling_points == matsubara_points
+        @assert Int.(matsubara_sampling.sampling_points) == matsubara_points
 
         # DLR
         @info "DLR"
