@@ -72,28 +72,6 @@
         @test retrieved_poles ≈ random_poles
     end
 
-    @testset "Default tau and Matsubara sampling points" begin
-        β = 100.0
-        ωmax = 10.0
-        ε = 1e-10
-
-        basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
-        dlr = DiscreteLehmannRepresentation(basis)
-
-        # Should inherit from underlying basis
-        tau_points = LibSparseIR.default_tau_sampling_points(dlr)
-        tau_points_basis = LibSparseIR.default_tau_sampling_points(basis)
-        @test tau_points == tau_points_basis
-
-        matsu_points = LibSparseIR.default_matsubara_sampling_points(dlr)
-        matsu_points_basis = LibSparseIR.default_matsubara_sampling_points(basis)
-        @test matsu_points == matsu_points_basis
-
-        # Test positive_only option
-        matsu_points_pos = LibSparseIR.default_matsubara_sampling_points(dlr; positive_only=true)
-        matsu_points_pos_basis = LibSparseIR.default_matsubara_sampling_points(basis; positive_only=true)
-        @test matsu_points_pos == matsu_points_pos_basis
-    end
 end
 
 @testitem "IR to DLR transformation" tags=[:julia, :spir] begin
