@@ -1,4 +1,4 @@
-@testitem "freq.jl" tags=[:julia, :sparseir] begin
+@testitem "freq.jl" tags=[:julia, :spir] begin
     using LibSparseIR
     @testset "freq" begin
         @test LibSparseIR.zeta(MatsubaraFreq(2)) == 0

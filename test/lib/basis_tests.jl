@@ -1,4 +1,4 @@
-@testitem "basis.jl" tags=[:julia] begin
+@testitem "basis.jl" tags=[:julia, :lib] begin
 	using LibSparseIR
 
 	β = 2.0

@@ -1,4 +1,4 @@
-@testitem "sve.jl" tags=[:julia] begin
+@testitem "sve.jl" tags=[:julia, :lib] begin
 	using LibSparseIR
 
 	@testset "sve_result/LogisticKernel" begin

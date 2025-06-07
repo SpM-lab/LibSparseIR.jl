@@ -1,4 +1,4 @@
-@testitem "Integration Test" tags=[:julia] begin
+@testitem "Integration Test" tags=[:julia, :spir] begin
     using LibSparseIR
     using LinearAlgebra
     using Random
@@ -211,7 +211,7 @@
         giw_from_IR_reconst = similar(giw_reconst)
         evaluate!(giw_from_IR_reconst, matsubara_sampling, gIR2; dim=target_dim + 1)
         @test compare_tensors_with_relative_error(giw_from_DLR, giw_from_IR_reconst, tol)
-        
+
         # Note: Julia uses automatic garbage collection with finalizers for C resource cleanup.
         # Unlike the C_API version, we don't need explicit release calls.
     end
@@ -260,7 +260,7 @@
             if !positive_only
                 integration_test(ComplexF64, LibSparseIR.Bosonic, LibSparseIR.LogisticKernel, 1,
                                beta, wmax, epsilon, extra_dims, 0, tol, positive_only)
-                               
+
                 integration_test(ComplexF64, LibSparseIR.Fermionic, LibSparseIR.LogisticKernel, 1,
                                beta, wmax, epsilon, extra_dims, 0, tol, positive_only)
             end
@@ -271,7 +271,7 @@
                 @info "Integration test for bosonic LogisticKernel, target_dim = $target_dim"
                 integration_test(Float64, LibSparseIR.Bosonic, LibSparseIR.LogisticKernel, 4,
                                 beta, wmax, epsilon, extra_dims, target_dim, tol, positive_only)
-                
+
                 # Also test complex for multi-dimensional arrays when positive_only=false
                 if !positive_only && target_dim == 0
                     integration_test(ComplexF64, LibSparseIR.Bosonic, LibSparseIR.LogisticKernel, 4,
