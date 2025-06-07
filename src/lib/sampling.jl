@@ -200,7 +200,11 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abs
         error("Type combination not yet supported for TauSampling: input=$Tin, output=$Tout")
     end
 
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate sampling: status=$ret")
+    ret in [
+        C_API.SPIR_INPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_OUTPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_INVALID_DIMENSION,
+    ] && throw(DimensionMismatch("Failed to evaluate sampling: status=$ret"))
     return output
 end
 
@@ -225,7 +229,11 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, a
         error("Type combination not supported for MatsubaraSampling: input=$Tin, output=$Tout")
     end
 
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate sampling: status=$ret")
+    ret in [
+        C_API.SPIR_INPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_OUTPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_INVALID_DIMENSION,
+    ] && throw(DimensionMismatch("Failed to evaluate sampling: status=$ret"))
     return output
 end
 
@@ -292,7 +300,11 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abstract
         error("Type combination not yet supported for TauSampling fit: input=$Tin, output=$Tout")
     end
 
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to fit sampling: status=$ret")
+    ret in [
+        C_API.SPIR_INPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_OUTPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_INVALID_DIMENSION,
+    ] && throw(DimensionMismatch("Failed to fit sampling: status=$ret"))
     return output
 end
 
@@ -307,7 +319,7 @@ function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::Ab
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
-
+    println("Tin: $Tin, Tout: $Tout")
     # Call appropriate C function based on input/output types
     if Tin <: Complex && Tout <: Complex
         # Use complex-to-complex API and then extract real part if needed
@@ -323,6 +335,10 @@ function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::Ab
         error("Type combination not supported for MatsubaraSampling fit: input=$Tin, output=$Tout")
     end
 
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to fit sampling: status=$ret")
+    ret in [
+        C_API.SPIR_INPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_OUTPUT_DIMENSION_MISMATCH,
+        C_API.SPIR_INVALID_DIMENSION,
+    ] && throw(DimensionMismatch("Failed to fit sampling: status=$ret"))
     return output
 end
