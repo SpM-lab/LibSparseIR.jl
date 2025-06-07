@@ -1,4 +1,4 @@
-@testitem "freq.jl" tags=[:julia] begin
+@testitem "freq.jl" tags=[:julia, :sparseir] begin
     using LibSparseIR
     @testset "freq" begin
         @test LibSparseIR.zeta(MatsubaraFreq(2)) == 0
@@ -83,4 +83,4 @@
         @test findfirst(==(first(haystack)), haystack) === 1
         @test findfirst(==(last(haystack)), haystack) === length(haystack)
     end
-end 
+end
