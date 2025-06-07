@@ -9,7 +9,7 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	    # Create basis
 	    status = Ref{Int32}(-100)
 	    basis = LibSparseIR.spir_basis_new(_statistics_to_c(S), β, ωmax, kernel.ptr, sve_result.ptr, status)
-	    status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS || error("Failed to create FiniteTempBasis")
+	    status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS || error("Failed to create FiniteTempBasis $S $K $β $ωmax $ε $status[]")
 	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε))
 	    finalizer(b -> spir_basis_release(b.ptr), result)
 	    return result
@@ -43,6 +43,15 @@ function default_matsubara_sampling_points(basis::FiniteTempBasis; positive_only
     points_array = Vector{Int64}(undef, n_points[])
     ret = spir_basis_get_default_matsus(basis.ptr, positive_only, points_array)
     ret == SPIR_COMPUTATION_SUCCESS || error("Failed to get default matsubara points")
+    return points_array
+end
+
+function default_omega_sampling_points(basis::FiniteTempBasis)
+    n_points = Ref{Int32}(-1)
+    ret = spir_basis_get_n_default_ws(basis.ptr, n_points)
+    ret == SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default omega points")
+    points_array = Vector{Float64}(undef, n_points[])
+    ret = spir_basis_get_default_ws(basis.ptr, points_array)
     return points_array
 end
 
