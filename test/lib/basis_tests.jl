@@ -10,18 +10,17 @@
 		@test true
 	end
 
-	@testset "FiniteTempBasis{S}/LogisticKernel for S=$(S)" for S in [Fermionic, Bosonic]
-		kernel = LogisticKernel(Λ)
-		basis = FiniteTempBasis(S(), kernel, β, ωmax, ε)
+	@testset "FiniteTempBasis{S} for S=$(S)" for S in [Fermionic, Bosonic]
+		kernel = LogisticKernel(10.0)
+		basis = FiniteTempBasis(S(), β, ωmax, ε; kernel)
 		@test true
 	end
 
-	@testset "FiniteTempBasis{S}/RegularizedBoseKernel for S=$(S)" for S in [Fermionic, Bosonic]
-		kernel = RegularizedBoseKernel(Λ)
-		if S() isa Fermionic
-			@test_throws "RegularizedBoseKernel does not support fermionic functions" FiniteTempBasis(S(), kernel, β, ωmax, ε)
-		else
-			@test true
-		end
+	@testset "FiniteTempBasis{S} for K=RegularizedBoseKernel" begin
+		kernel = RegularizedBoseKernel(10.0)
+		@test_throws "Failed to create FiniteTempBasis" FiniteTempBasis(Fermionic(), β, ωmax, ε; kernel)
+
+		kernel = RegularizedBoseKernel(10.0)
+		basis = FiniteTempBasis(Bosonic(), β, ωmax, ε; kernel)
 	end
 end

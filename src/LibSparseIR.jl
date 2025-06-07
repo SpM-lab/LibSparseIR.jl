@@ -18,9 +18,9 @@ export from_IR, to_IR, npoles, get_poles, default_omega_sampling_points
 
 include("lib/freq.jl")
 include("lib/abstract.jl")
-include("lib/basis.jl")
 include("lib/kernel.jl")
 include("lib/sve.jl")
+include("lib/basis.jl")
 include("lib/sampling.jl")
 include("lib/dlr.jl")
 
@@ -30,5 +30,6 @@ include("spir/kernel.jl")
 include("spir/basis.jl")
 include("spir/sampling.jl")
 include("spir/dlr.jl")
+include("spir/basis_set.jl")
 
 end # module LibSparseIR
