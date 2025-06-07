@@ -52,14 +52,14 @@ using a collocation).
 Returns:
 An `SVEResult` containing the truncated singular value expansion.
 """
-mutable struct SVEResult
+mutable struct SVEResult{K<:AbstractKernel}
     ptr::Ptr{spir_sve_result}
-
-    function SVEResult(kernel::AbstractKernel, ε::Real)
+    kernel::K
+    function SVEResult(kernel::K, ε::Real) where {K<:AbstractKernel}
         status = Ref{Int32}(-100)
         sve_result = spir_sve_result_new(kernel.ptr, ε, status)
         status[] == 0 || error("Failed to create SVEResult")
-        result = new(sve_result)
+        result = new{K}(sve_result, kernel)
         finalizer(r -> spir_sve_result_release(r.ptr), result)
         return result
     end

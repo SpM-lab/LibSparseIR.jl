@@ -25,17 +25,17 @@ function significance(basis::FiniteTempBasis)
     return svals / svals[1]
 end
 
-function finite_temp_bases(β::Real, ωmax::Real, ε=nothing; kernel=nothing, sve_result=nothing)
-    # Handle optional ε parameter like SparseIR.jl
-    if ε === nothing
-        ε = 1e-10  # Default epsilon value
-    end
+"""
+    finite_temp_bases(β::Real, ωmax::Real, ε=nothing;
+                      kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel; ε))
 
-    # Note: kernel and sve_result parameters are currently ignored
-    # as the C API handles these internally
-    # TODO: Add support for these parameters in future versions
-
-    ferm_basis = FiniteTempBasis{Fermionic}(β, ωmax, ε)
-    bose_basis = FiniteTempBasis{Bosonic}(β, ωmax, ε)
-    return (ferm_basis, bose_basis)
+Construct `FiniteTempBasis` objects for fermion and bosons using the same
+`LogisticKernel` instance.
+"""
+function finite_temp_bases(β::Real, ωmax::Real, ε::Real;
+        kernel=LogisticKernel(β * ωmax),
+        sve_result=SVEResult(kernel, ε))
+    basis_f = FiniteTempBasis{Fermionic}(β, ωmax, ε; sve_result, kernel)
+    basis_b = FiniteTempBasis{Bosonic}(β, ωmax, ε; sve_result, kernel)
+    return basis_f, basis_b
 end
