@@ -1,3 +1,15 @@
+function (funcs::Ptr{spir_funcs})(x::Real)
+    sz = Ref{Int32}(-1)
+    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    ret = Vector{Float64}(undef, Int(sz[]))
+    spir_funcs_eval(funcs, x, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
+    return ret
+end
+
+function (funcs::Ptr{spir_funcs})(x::Vector{Float64})
+    hcat(funcs.(x)...)
+end
+
 mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	ptr::Ptr{spir_basis}
 	kernel::K
@@ -5,12 +17,26 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	beta::Float64
 	wmax::Float64
 	epsilon::Float64
+    s::Vector{Float64}
+    u::Ptr{spir_funcs}
+    v::Ptr{spir_funcs}
 	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
 	    # Create basis
 	    status = Ref{Int32}(-100)
 	    basis = LibSparseIR.spir_basis_new(_statistics_to_c(S), β, ωmax, kernel.ptr, sve_result.ptr, status)
 	    status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS || error("Failed to create FiniteTempBasis $S $K $β $ωmax $ε $status[]")
-	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε))
+
+        basis_size = Ref{Int32}(0)
+        spir_basis_get_size(basis, basis_size) == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis size")
+        s = Vector{Float64}(undef, Int(basis_size[]))
+        spir_basis_get_svals(basis, s) == SPIR_COMPUTATION_SUCCESS || error("Failed to get singular values")
+        u_status = Ref{Int32}(-100)
+        u = spir_basis_get_u(basis, u_status)
+        u_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions u $u_status[]")
+        v_status = Ref{Int32}(-100)
+        v = spir_basis_get_v(basis, v_status)
+        v_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions v $v_status[]")
+	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), s, u, v)
 	    finalizer(b -> spir_basis_release(b.ptr), result)
 	    return result
 	end

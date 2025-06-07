@@ -1,12 +1,6 @@
 Base.broadcastable(b::AbstractBasis) = Ref(b)
 Base.firstindex(::AbstractBasis) = 1
-# Base.length(basis::AbstractBasis) = length(basis.s)
-function Base.length(basis::AbstractBasis)
-    basis_size = Ref{Int32}(0)
-    size_result = LibSparseIR.spir_basis_get_size(basis.ptr, basis_size)
-    size_result == LibSparseIR.SPIR_COMPUTATION_SUCCESS || throw(ErrorException("Failed to get basis size"))
-    return basis_size[]
-end
+Base.length(basis::AbstractBasis) = length(basis.s)
 
 """
     accuracy(basis::AbstractBasis)
