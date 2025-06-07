@@ -58,7 +58,7 @@
 
         # IR basis
         kernel = K(beta * wmax)
-        basis = FiniteTempBasis(S(), kernel, beta, wmax, epsilon)
+        basis = FiniteTempBasis(S(), beta, wmax, epsilon; kernel)
         basis_size = length(basis)
 
         # Tau Sampling
