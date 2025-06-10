@@ -10,6 +10,27 @@ function (funcs::Ptr{spir_funcs})(x::Vector{Float64})
     hcat(funcs.(x)...)
 end
 
+function Base.getindex(funcs::Ptr{spir_funcs}, i::Int)
+    status = Ref{Int32}(-100)
+    indices = Vector{Int32}(undef, 1)
+    indices[1] = i
+    ret = spir_funcs_get_slice(funcs, 1, indices, status)
+    status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis function u $status[]")
+    return ret
+end
+
+Base.getindex(funcs::Ptr{spir_funcs}, I) = [funcs[i] for i in I]
+
+function Base.length(funcs::Ptr{spir_funcs})
+    sz = Ref{Int32}(-1)
+    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    return Int(sz[])
+end
+
+Base.firstindex(funcs::Ptr{spir_funcs}) = 1
+Base.lastindex(funcs::Ptr{spir_funcs}) = length(funcs)
+
+
 mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	ptr::Ptr{spir_basis}
 	kernel::K
