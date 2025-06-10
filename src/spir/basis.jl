@@ -20,10 +20,13 @@ function rescale(basis::FiniteTempBasis{S}, new_beta::Real) where {S}
 end
 
 # Additional utility functions
-function significance(basis::FiniteTempBasis)
-    svals = s(basis)
-    return svals / svals[1]
+significance(basis::FiniteTempBasis) = basis.s ./ first(basis.s)
+
+function range_to_length(range::UnitRange)
+    isone(first(range)) || error("Range must start at 1.")
+    return last(range)
 end
+
 
 """
     finite_temp_bases(β::Real, ωmax::Real, ε=nothing;
