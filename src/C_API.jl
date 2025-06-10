@@ -392,6 +392,41 @@ function spir_funcs_batch_eval_matsu(funcs, order, num_freqs, matsubara_freq_ind
 end
 
 """
+    spir_funcs_get_n_roots(funcs, n_roots)
+
+Gets the number of roots of a funcs object.
+
+This function returns the number of roots of the specified funcs object. This function is only available for continuous functions.
+
+# Arguments
+* `funcs`: Pointer to the funcs object
+* `n_roots`: Pointer to store the number of roots
+# Returns
+An integer status code:
+"""
+function spir_funcs_get_n_roots(funcs, n_roots)
+    ccall((:spir_funcs_get_n_roots, libsparseir), Cint, (Ptr{spir_funcs}, Ptr{Cint}), funcs, n_roots)
+end
+
+"""
+    spir_funcs_get_roots(funcs, roots)
+
+Gets the roots of a funcs object.
+
+This function returns the roots of the specified funcs object in the non-ascending order. If the size of the funcs object is greater than 1, the roots for all the functions are returned. This function is only available for continuous functions.
+
+# Arguments
+* `funcs`: Pointer to the funcs object
+* `n_roots`: Pointer to store the number of roots
+* `roots`: Pointer to store the roots
+# Returns
+An integer status code:
+"""
+function spir_funcs_get_roots(funcs, roots)
+    ccall((:spir_funcs_get_roots, libsparseir), Cint, (Ptr{spir_funcs}, Ptr{Cdouble}), funcs, roots)
+end
+
+"""
     spir_basis_new(statistics, beta, omega_max, k, sve, status)
 
 Creates a new finite temperature IR basis using a pre-computed SVE result.
