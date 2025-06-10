@@ -22,6 +22,12 @@ end
 # Additional utility functions
 significance(basis::FiniteTempBasis) = basis.s ./ first(basis.s)
 
+function range_to_length(range::UnitRange)
+    isone(first(range)) || error("Range must start at 1.")
+    return last(range)
+end
+
+
 """
     finite_temp_bases(β::Real, ωmax::Real, ε=nothing;
                       kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel; ε))

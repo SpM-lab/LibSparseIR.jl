@@ -150,8 +150,9 @@ augmentedfunction(aτ::AugmentedTauFunction) = aτ.a
 
 AugmentedTauFunction(fbasis, faug) = AugmentedTauFunction(AugmentedFunction(fbasis, faug))
 
-xmin(aτ::AugmentedTauFunction) = xmin(fbasis(aτ))
-xmax(aτ::AugmentedTauFunction) = xmax(fbasis(aτ))
+# Not supported yet
+#xmin(aτ::AugmentedTauFunction) = xmin(fbasis(aτ))
+#xmax(aτ::AugmentedTauFunction) = xmax(fbasis(aτ))
 
 function deriv(aτ::AugmentedTauFunction, n=Val(1))
     dbasis = PiecewiseLegendrePolyVector(deriv.(fbasis(aτ), n))
