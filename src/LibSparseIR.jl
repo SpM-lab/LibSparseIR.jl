@@ -31,5 +31,6 @@ include("spir/basis.jl")
 include("spir/sampling.jl")
 include("spir/dlr.jl")
 include("spir/basis_set.jl")
+include("spir/augment.jl")
 
 end # module LibSparseIR
