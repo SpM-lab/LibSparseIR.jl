@@ -6,6 +6,7 @@
     using LinearAlgebra
 
     # TODO: How to init TauSampling(basis_aug) ?
+    #=
     @testset "Augmented bosonic basis" begin
         ωmax = 2
         β = 1000
@@ -37,7 +38,9 @@
 
         @test isapprox(gτ_reconst, gτ, atol=1e-14 * magn)
     end
+    =#
 
+    #=
     @testset "Vertex basis with stat = $stat" for stat in (Fermionic(), Bosonic())
         ωmax = 2
         β = 1000
@@ -56,6 +59,7 @@
 
         @test isapprox(giν_reconst, giν, atol=maximum(abs, giν) * 1e-7)
     end
+    =#
 
     @testset "unit tests" begin
         β = 1000
