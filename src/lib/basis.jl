@@ -20,6 +20,7 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
     s::Vector{Float64}
     u::Ptr{spir_funcs}
     v::Ptr{spir_funcs}
+    uhat::Ptr{spir_funcs}
 	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
 	    # Create basis
 	    status = Ref{Int32}(-100)
@@ -36,7 +37,10 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
         v_status = Ref{Int32}(-100)
         v = spir_basis_get_v(basis, v_status)
         v_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions v $v_status[]")
-	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), s, u, v)
+        uhat_status = Ref{Int32}(-100)
+        uhat = spir_basis_get_uhat(basis, uhat_status)
+        uhat_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions uhat $uhat_status[]")
+	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), s, u, v, uhat)
 	    finalizer(b -> spir_basis_release(b.ptr), result)
 	    return result
 	end
