@@ -6,9 +6,9 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	wmax::Float64
 	epsilon::Float64
     s::Vector{Float64}
-    u::Ptr{spir_funcs}
-    v::Ptr{spir_funcs}
-    uhat::Ptr{spir_funcs}
+    u::PiecewiseLegendrePolyVector
+    v::PiecewiseLegendrePolyVector
+    uhat::PiecewiseLegendreFTVector
 	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
 	    # Create basis
 	    status = Ref{Int32}(-100)
@@ -28,7 +28,13 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
         uhat_status = Ref{Int32}(-100)
         uhat = spir_basis_get_uhat(basis, uhat_status)
         uhat_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions uhat $uhat_status[]")
-	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), s, u, v, uhat)
+	    result = new{S, K}(
+            basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε),
+            s,
+            PiecewiseLegendrePolyVector(u, 0.0, β),
+            PiecewiseLegendrePolyVector(v, -ωmax, ωmax),
+            PiecewiseLegendreFTVector(uhat)
+        )
 	    finalizer(b -> spir_basis_release(b.ptr), result)
 	    return result
 	end
