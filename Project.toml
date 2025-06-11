@@ -7,11 +7,13 @@ version = "0.1.0"
 CEnum = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 
 [compat]
 CEnum = "0.5.0"
 Libdl = "1"
 LinearAlgebra = "1"
+QuadGK = "2.11.2"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
