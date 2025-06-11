@@ -4,6 +4,7 @@ include("C_API.jl") # LibSparseIR_C_API
 using .C_API
 
 import LinearAlgebra
+using QuadGK: quadgk
 
 export Fermionic, Bosonic
 export MatsubaraFreq, BosonicFreq, FermionicFreq, pioverbeta
@@ -28,6 +29,7 @@ include("lib/dlr.jl")
 include("spir/abstract.jl")
 include("spir/freq.jl")
 include("spir/kernel.jl")
+include("spir/poly.jl")
 include("spir/basis.jl")
 include("spir/sampling.jl")
 include("spir/dlr.jl")

@@ -23,19 +23,19 @@ mutable struct PiecewiseLegendreFTVector
     end
 end
 
-function (funcs::PiecewiseLegendrePolyVector)(x::Real)
+function (polys::PiecewiseLegendrePolyVector)(x::Real)
     sz = Ref{Int32}(-1)
-    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    spir_funcs_get_size(polys.ptr, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
     ret = Vector{Float64}(undef, Int(sz[]))
-    spir_funcs_eval(funcs, x, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
+    spir_funcs_eval(polys.ptr, x, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
     return ret
 end
 
-function (funcs::PiecewiseLegendrePolyVector)(x::Vector{Float64})
-    hcat(funcs.(x)...)
+function (polys::PiecewiseLegendrePolyVector)(x::Vector{Float64})
+    hcat(polys.(x)...)
 end
 
-function Base.getindex(funcs::PiecewiseLegendrePolyVector, i::Int)
+function Base.getindex(funcs::Ptr{spir_funcs}, i::Int)
     status = Ref{Int32}(-100)
     indices = Vector{Int32}(undef, 1)
     indices[1] = i
@@ -44,37 +44,38 @@ function Base.getindex(funcs::PiecewiseLegendrePolyVector, i::Int)
     return ret
 end
 
-Base.getindex(funcs::PiecewiseLegendrePolyVector, I) = [funcs[i] for i in I]
+function Base.getindex(polys::PiecewiseLegendrePolyVector, i::Int)
+    return polys.ptr[i]
+end
 
-function Base.length(funcs::PiecewiseLegendrePolyVector)
+Base.getindex(funcs::Ptr{spir_funcs}, I) = [funcs[i] for i in I]
+Base.getindex(polys::PiecewiseLegendrePolyVector, I) = [polys[i] for i in I]
+
+function Base.length(funcs::Ptr{spir_funcs})
     sz = Ref{Int32}(-1)
     spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
     return Int(sz[])
 end
 
-Base.firstindex(funcs::PiecewiseLegendrePolyVector) = 1
-Base.lastindex(funcs::PiecewiseLegendrePolyVector) = length(funcs)
-
-function roots(poly::PiecewiseLegendrePolyVector)
-	nroots_ref = Ref{Int32}(-1)
-	LibSparseIR.C_API.spir_funcs_get_n_roots(poly.ptr, nroots_ref)
-	nroots = nroots_ref[]
-
-	out = Vector{Float64}(undef, nroots)
-
-	LibSparseIR.C_API.spir_funcs_get_roots(
-		poly.ptr, out
-	)
-	return out
+function Base.length(polys::PiecewiseLegendrePolyVector)
+    return length(polys.ptr)
 end
 
-function overlap(poly::PiecewiseLegendrePolyVector, f::F) where {F}
-    xmin = poly.xmin
-    xmax = poly.xmax
-    pts = filter(x -> xmin ≤ x ≤ xmax, roots(poly))
-    q, _ = quadgk(
-        x -> poly(x) * f(x),
-        unique!(sort!(vcat(pts, [xmin, xmax])));
-        rtol=eps(), order=10, maxevals=10^4)
-    q
+Base.firstindex(funcs::Ptr{spir_funcs}) = 1
+Base.lastindex(funcs::Ptr{spir_funcs}) = length(funcs)
+
+Base.firstindex(polys::PiecewiseLegendrePolyVector) = firstindex(polys.ptr)
+Base.lastindex(polys::PiecewiseLegendrePolyVector) = lastindex(polys.ptr)
+
+function roots(poly::PiecewiseLegendrePolyVector)
+    nroots_ref = Ref{Int32}(-1)
+    LibSparseIR.C_API.spir_funcs_get_n_roots(poly.ptr, nroots_ref)
+    nroots = nroots_ref[]
+
+    out = Vector{Float64}(undef, nroots)
+
+    LibSparseIR.C_API.spir_funcs_get_roots(
+        poly.ptr, out
+    )
+    return out
 end
