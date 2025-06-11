@@ -1,0 +1,81 @@
+mutable struct PiecewiseLegendrePolyVector
+    ptr::Ptr{spir_funcs}
+    xmin::Float64
+    xmax::Float64
+    function PiecewiseLegendrePolyVector(funcs::Ptr{spir_funcs}, xmin::Float64, xmax::Float64)
+        result = new(funcs, xmin, xmax)
+        finalizer(r -> spir_funcs_release(r.ptr), result)
+        return result
+    end
+end
+
+mutable struct PiecewiseLegendreFTVector
+    ptr::Ptr{spir_funcs}
+    xmin::Float64
+    xmax::Float64
+
+    function PiecewiseLegendreFTVector(funcs::Ptr{spir_funcs})
+        xmin = -1.0
+        xmax = 1.0
+        result = new(funcs, xmin, xmax)
+        finalizer(r -> spir_funcs_release(r.ptr), result)
+        return result
+    end
+end
+
+function (polys::PiecewiseLegendrePolyVector)(x::Real)
+    sz = Ref{Int32}(-1)
+    spir_funcs_get_size(polys.ptr, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    ret = Vector{Float64}(undef, Int(sz[]))
+    spir_funcs_eval(polys.ptr, x, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
+    return ret
+end
+
+function (polys::PiecewiseLegendrePolyVector)(x::Vector{Float64})
+    hcat(polys.(x)...)
+end
+
+function Base.getindex(funcs::Ptr{spir_funcs}, i::Int)
+    status = Ref{Int32}(-100)
+    indices = Vector{Int32}(undef, 1)
+    indices[1] = i
+    ret = spir_funcs_get_slice(funcs, 1, indices, status)
+    status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis function u $status[]")
+    return ret
+end
+
+function Base.getindex(polys::PiecewiseLegendrePolyVector, i::Int)
+    return polys.ptr[i]
+end
+
+Base.getindex(funcs::Ptr{spir_funcs}, I) = [funcs[i] for i in I]
+Base.getindex(polys::PiecewiseLegendrePolyVector, I) = [polys[i] for i in I]
+
+function Base.length(funcs::Ptr{spir_funcs})
+    sz = Ref{Int32}(-1)
+    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    return Int(sz[])
+end
+
+function Base.length(polys::PiecewiseLegendrePolyVector)
+    return length(polys.ptr)
+end
+
+Base.firstindex(funcs::Ptr{spir_funcs}) = 1
+Base.lastindex(funcs::Ptr{spir_funcs}) = length(funcs)
+
+Base.firstindex(polys::PiecewiseLegendrePolyVector) = firstindex(polys.ptr)
+Base.lastindex(polys::PiecewiseLegendrePolyVector) = lastindex(polys.ptr)
+
+function roots(poly::PiecewiseLegendrePolyVector)
+    nroots_ref = Ref{Int32}(-1)
+    LibSparseIR.C_API.spir_funcs_get_n_roots(poly.ptr, nroots_ref)
+    nroots = nroots_ref[]
+
+    out = Vector{Float64}(undef, nroots)
+
+    LibSparseIR.C_API.spir_funcs_get_roots(
+        poly.ptr, out
+    )
+    return out
+end

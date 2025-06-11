@@ -1,36 +1,3 @@
-function (funcs::Ptr{spir_funcs})(x::Real)
-    sz = Ref{Int32}(-1)
-    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
-    ret = Vector{Float64}(undef, Int(sz[]))
-    spir_funcs_eval(funcs, x, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
-    return ret
-end
-
-function (funcs::Ptr{spir_funcs})(x::Vector{Float64})
-    hcat(funcs.(x)...)
-end
-
-function Base.getindex(funcs::Ptr{spir_funcs}, i::Int)
-    status = Ref{Int32}(-100)
-    indices = Vector{Int32}(undef, 1)
-    indices[1] = i
-    ret = spir_funcs_get_slice(funcs, 1, indices, status)
-    status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis function u $status[]")
-    return ret
-end
-
-Base.getindex(funcs::Ptr{spir_funcs}, I) = [funcs[i] for i in I]
-
-function Base.length(funcs::Ptr{spir_funcs})
-    sz = Ref{Int32}(-1)
-    spir_funcs_get_size(funcs, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
-    return Int(sz[])
-end
-
-Base.firstindex(funcs::Ptr{spir_funcs}) = 1
-Base.lastindex(funcs::Ptr{spir_funcs}) = length(funcs)
-
-
 mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	ptr::Ptr{spir_basis}
 	kernel::K
@@ -39,9 +6,9 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	wmax::Float64
 	epsilon::Float64
     s::Vector{Float64}
-    u::Ptr{spir_funcs}
-    v::Ptr{spir_funcs}
-    uhat::Ptr{spir_funcs}
+    u::PiecewiseLegendrePolyVector
+    v::PiecewiseLegendrePolyVector
+    uhat::PiecewiseLegendreFTVector
 	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
 	    # Create basis
 	    status = Ref{Int32}(-100)
@@ -61,7 +28,13 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
         uhat_status = Ref{Int32}(-100)
         uhat = spir_basis_get_uhat(basis, uhat_status)
         uhat_status[] == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis functions uhat $uhat_status[]")
-	    result = new{S, K}(basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), s, u, v, uhat)
+	    result = new{S, K}(
+            basis, kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε),
+            s,
+            PiecewiseLegendrePolyVector(u, 0.0, β),
+            PiecewiseLegendrePolyVector(v, -ωmax, ωmax),
+            PiecewiseLegendreFTVector(uhat)
+        )
 	    finalizer(b -> spir_basis_release(b.ptr), result)
 	    return result
 	end
