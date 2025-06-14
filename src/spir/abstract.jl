@@ -1,3 +1,5 @@
+_get_ptr(basis::AbstractBasis) = basis.ptr
+
 Base.broadcastable(b::AbstractBasis) = Ref(b)
 Base.firstindex(::AbstractBasis) = 1
 Base.length(basis::AbstractBasis) = length(basis.s)

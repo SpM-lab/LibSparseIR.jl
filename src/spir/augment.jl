@@ -59,6 +59,28 @@ struct AugmentedBasis{S<:Statistics,B<:FiniteTempBasis{S},A<:AugmentationTuple,F
     uhat          :: FHAT
 end
 
+"""
+TauSampling(basis; sampling_points=default_tau_sampling_points(basis), factorize=true)
+
+Construct a `TauSampling` object. If not given, the `sampling_points` are chosen
+as the extrema of the highest-order basis function in imaginary time. This turns
+out to be close to optimal with respect to conditioning for this size (within a
+few percent).
+"""
+function TauSampling(basis::AugmentedBasis{S}; sampling_points=default_tau_sampling_points(basis)) where S
+    matrix = eval_matrix(TauSampling, basis, sampling_points)
+    status = Ref{Int32}(-100)
+    ptr = C_API.spir_tau_sampling_new_with_matrix(C_API.SPIR_ORDER_COLUMN_MAJOR, _statistics_to_c(S), length(basis), length(sampling_points), sampling_points, matrix, status)
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create tau sampling: status=$(status[])")
+    ptr != C_NULL || error("Failed to create tau sampling: null pointer returned")
+
+    return TauSampling{Float64,typeof(basis)}(ptr, sampling_points, basis)
+end
+
+function _get_ptr(basis::AugmentedBasis)
+    _get_ptr(basis.basis)
+end
+
 function AugmentedBasis(basis::AbstractBasis, augmentations...)
     augs = create.(augmentations, basis)
     u = AugmentedTauFunction(basis.u, augs)
@@ -83,10 +105,12 @@ accuracy(basis::AugmentedBasis) = accuracy(basis.basis)
 
 significance(basis::AugmentedBasis) = vcat(ones(naug(basis)), significance(basis.basis))
 
-# TODO: Use C_API to call default_sampling_points
 function default_tau_sampling_points(basis::AugmentedBasis)
-    x = default_sampling_points(basis.basis.sve_result.u, length(basis))
-    β(basis) / 2 * (x .+ 1)
+    points = Vector{Float64}(undef, length(basis))
+    n_points_returned = Ref{Cint}(0)
+    status = spir_basis_get_default_taus_ext(_get_ptr(basis.basis), length(basis), points, n_points_returned)
+    status == SPIR_COMPUTATION_SUCCESS || error("Failed to get default tau sampling points")
+    return points
 end
 
 # TODO: Use C_API to call default_sampling_points
@@ -194,7 +218,9 @@ end
 create(::Type{TauConst}, basis::AbstractBasis{Bosonic}) = TauConst(β(basis))
 
 function (aug::TauConst)(τ)
-    0 ≤ τ ≤ β(aug) || throw(DomainError(τ, "τ must be in [0, β]."))
+    #0 ≤ τ ≤ β(aug) || throw(DomainError(τ, "τ must be in [0, β]."))
+    -β(aug)/2 ≤ τ ≤ β(aug)/2 || throw(DomainError(τ, "τ must be in [-β(aug)/2, β(aug)/2]."))
+
     return 1 / sqrt(β(aug))
 end
 function (aug::TauConst)(n::BosonicFreq)
@@ -226,7 +252,8 @@ end
 create(::Type{TauLinear}, basis::AbstractBasis{Bosonic}) = TauLinear(β(basis))
 
 function (aug::TauLinear)(τ)
-    0 ≤ τ ≤ β(aug) || throw(DomainError(τ, "τ must be in [0, β]."))
+    # 0 ≤ τ ≤ β(aug) || throw(DomainError(τ, "τ must be in [0, β]."))
+    -β(aug)/2 ≤ τ ≤ β(aug)/2 || throw(DomainError(τ, "τ must be in [-β(aug)/2, β(aug)/2]."))
     x = 2 / β(aug) * τ - 1
     return aug.norm * x
 end
@@ -259,7 +286,7 @@ end
 create(::Type{MatsubaraConst}, basis::AbstractBasis) = MatsubaraConst(β(basis))
 
 function (aug::MatsubaraConst)(τ)
-    0 ≤ τ ≤ β(aug) || throw(DomainError(τ, "τ must be in [0, β]."))
+    -β(aug)/2 ≤ τ ≤ β(aug)/2 || throw(DomainError(τ, "τ must be in [-β(aug)/2, β(aug)/2]."))
     return NaN
 end
 function (aug::MatsubaraConst)(::MatsubaraFreq)
