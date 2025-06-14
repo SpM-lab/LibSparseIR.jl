@@ -29,21 +29,18 @@
         β = 1000
         basis = FiniteTempBasis(stat, β, ωmax, 1e-6)
         basis_aug = AugmentedBasis(basis, MatsubaraConst)
+        @test !isnothing(basis_aug.uhat)
 
         # G(iν) = c + 1 / (iν - pole)
         pole = 1.0
         c = 1.0
-        # TODO: fix this test
-        #=
         matsu_smpl = MatsubaraSampling(basis_aug)
-
-        giν = rand(ComplexF64, length(basis_aug))
+        giν = @. c + 1 / (SparseIR.valueim(matsu_smpl.ωn, β) - pole)
         gl = fit(matsu_smpl, giν)
 
         giν_reconst = evaluate(matsu_smpl, gl)
 
-        @test isapprox(giν_reconst, giν, atol= 1e-7)
-        =#
+        @test isapprox(giν_reconst, giν, atol=maximum(abs, giν) * 1e-7)
     end
 
     @testset "unit tests" begin
