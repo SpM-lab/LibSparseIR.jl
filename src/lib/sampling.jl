@@ -125,11 +125,6 @@ function eval_matrix end
 eval_matrix(::Type{TauSampling}, basis, x)       = permutedims(basis.u(x))
 eval_matrix(::Type{MatsubaraSampling}, basis, x) = permutedims(basis.uhat(x))
 
-Base.getproperty(s::TauSampling, p::Symbol) = p === :τ ? sampling_points(s) : getfield(s, p)
-function Base.getproperty(s::MatsubaraSampling, p::Symbol)
-    p === :ωn ? sampling_points(s) : getfield(s, p)
-end
-
 """
     npoints(sampling::AbstractSampling)
 

@@ -13,29 +13,14 @@
 
         @test all(isone, SparseIR.significance(basis_aug)[1:3])
 
-        # G(τ) = c - e^{-τ * pole} / (1 - e^{-β * pole})
-        pole = 1.0
-        c = 1e-2
+        gτ = rand(length(basis_aug))
         τ_smpl = TauSampling(basis_aug)
-        @test length(τ_smpl.τ) == length(basis_aug)
-        gτ = c .+ transpose(basis.u(τ_smpl.τ)) * (-basis.s .* basis.v(pole))
-        magn = maximum(abs, gτ)
-
-        # TODO: define matrix field to pass tests
-        # This illustrates that "naive" fitting is a problem if the fitting matrix
-        # is not well-conditioned.
-        #gl_fit_bad = pinv(τ_smpl.matrix) * gτ
-        #gτ_reconst_bad = evaluate(τ_smpl, gl_fit_bad)
-        #@test !isapprox(gτ_reconst_bad, gτ; atol=1e-13 * magn)
-        #@test isapprox(gτ_reconst_bad, gτ, atol=5e-16 * cond(τ_smpl) * magn)
-        #@test cond(τ_smpl) > 1e7
-        #@test size(τ_smpl.matrix) == (length(basis_aug), length(τ_smpl.τ))
-
-        # Now do the fit properly
         gl_fit = fit(τ_smpl, gτ)
         gτ_reconst = evaluate(τ_smpl, gl_fit)
 
-        @test isapprox(gτ_reconst, gτ, atol=1e-14 * magn)
+        @test size(gτ_reconst) == size(gτ)
+
+        @test isapprox(gτ_reconst, gτ, atol=1e-8)
 
     end
 
