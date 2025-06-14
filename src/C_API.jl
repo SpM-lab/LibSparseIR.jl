@@ -727,6 +727,27 @@ function spir_basis_get_default_ws(b, points)
 end
 
 """
+    spir_basis_get_default_taus_ext(b, n_points, points, n_points_returned)
+
+*
+
+Gets the default tau sampling points for ann IR basis.
+
+This function returns default tau sampling points for an IR basis object.
+
+# Arguments
+* `b`: Pointer to the basis object
+* `n_points`: Number of requested sampling points.
+* `points`: Pre-allocated array to store the sampling points. The size of the array must be at least n\\_points.
+* `n_points_returned`: Number of sampling points returned.
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success
+"""
+function spir_basis_get_default_taus_ext(b, n_points, points, n_points_returned)
+    ccall((:spir_basis_get_default_taus_ext, libsparseir), Cint, (Ptr{spir_basis}, Cint, Ptr{Cdouble}, Ptr{Cint}), b, n_points, points, n_points_returned)
+end
+
+"""
     spir_basis_get_n_default_matsus(b, positive_only, num_points)
 
 Gets the number of default Matsubara sampling points for an IR basis.
@@ -1016,6 +1037,28 @@ function spir_tau_sampling_new(b, num_points, points, status)
 end
 
 """
+    spir_tau_sampling_new_with_matrix(order, statistics, basis_size, num_points, points, matrix, status)
+
+Creates a new tau sampling object for sparse sampling in imaginary time with custom sampling points and a pre-computed matrix.
+
+This function creates a sampling object that allows transformation between the IR basis and a user-specified set of sampling points in imaginary time (τ). The sampling points are provided by the user, allowing for custom sampling strategies.
+
+# Arguments
+* `order`: Memory layout order ([`SPIR_ORDER_ROW_MAJOR`](@ref) or [`SPIR_ORDER_COLUMN_MAJOR`](@ref))
+* `statistics`: Statistics type ([`SPIR_STATISTICS_FERMIONIC`](@ref) or [`SPIR_STATISTICS_BOSONIC`](@ref))
+* `basis_size`: Basis size
+* `num_points`: Number of sampling points
+* `points`: Array of sampling points in imaginary time (τ)
+* `matrix`: Pre-computed matrix for the sampling points (num\\_points x basis\\_size). For Matsubara sampling, this should be a complex matrix.
+* `status`: Pointer to store the status code
+# Returns
+Pointer to the newly created sampling object, or NULL if creation fails
+"""
+function spir_tau_sampling_new_with_matrix(order, statistics, basis_size, num_points, points, matrix, status)
+    ccall((:spir_tau_sampling_new_with_matrix, libsparseir), Ptr{spir_sampling}, (Cint, Cint, Cint, Cint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cint}), order, statistics, basis_size, num_points, points, matrix, status)
+end
+
+"""
     spir_matsu_sampling_new(b, positive_only, num_points, points, status)
 
 Creates a new Matsubara sampling object for sparse sampling in Matsubara frequencies with custom sampling points.
@@ -1033,6 +1076,31 @@ Pointer to the newly created sampling object, or NULL if creation fails
 """
 function spir_matsu_sampling_new(b, positive_only, num_points, points, status)
     ccall((:spir_matsu_sampling_new, libsparseir), Ptr{spir_sampling}, (Ptr{spir_basis}, Bool, Cint, Ptr{Int64}, Ptr{Cint}), b, positive_only, num_points, points, status)
+end
+
+"""
+    spir_matsu_sampling_new_with_matrix(order, statistics, basis_size, positive_only, num_points, points, matrix, status)
+
+Creates a new Matsubara sampling object for sparse sampling in Matsubara frequencies with custom sampling points and a pre-computed evaluation matrix.
+
+This function creates a sampling object that can be used to evaluate and fit functions at specific Matsubara frequencies. The sampling points and evaluation matrix are provided directly, allowing for custom sampling configurations.
+
+# Arguments
+* `order`: Memory layout order ([`SPIR_ORDER_ROW_MAJOR`](@ref) or [`SPIR_ORDER_COLUMN_MAJOR`](@ref))
+* `statistics`: Statistics type ([`SPIR_STATISTICS_FERMIONIC`](@ref) or [`SPIR_STATISTICS_BOSONIC`](@ref))
+* `basis_size`: Basis size
+* `positive_only`: If true, only positive Matsubara frequencies are used
+* `num_points`: Number of sampling points
+* `points`: Array of Matsubara frequencies (integer indices)
+* `matrix`: Pre-computed evaluation matrix of size (num\\_points × basis\\_size)
+* `status`: Pointer to store the status code
+# Returns
+Pointer to the new sampling object, or NULL if creation fails
+# See also
+[`spir_matsu_sampling_new`](@ref)
+"""
+function spir_matsu_sampling_new_with_matrix(order, statistics, basis_size, positive_only, num_points, points, matrix, status)
+    ccall((:spir_matsu_sampling_new_with_matrix, libsparseir), Ptr{spir_sampling}, (Cint, Cint, Cint, Bool, Cint, Ptr{Int64}, Ptr{c_complex}, Ptr{Cint}), order, statistics, basis_size, positive_only, num_points, points, matrix, status)
 end
 
 """
@@ -1106,6 +1174,31 @@ An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A 
 """
 function spir_sampling_get_matsus(s, points)
     ccall((:spir_sampling_get_matsus, libsparseir), Cint, (Ptr{spir_sampling}, Ptr{Int64}), s, points)
+end
+
+"""
+    spir_sampling_get_cond_num(s, cond_num)
+
+Gets the condition number of the sampling matrix.
+
+This function returns the condition number of the sampling matrix used in the specified sampling object. The condition number is a measure of how well- conditioned the sampling matrix is.
+
+!!! note
+
+    A large condition number indicates that the sampling matrix is ill-conditioned, which may lead to numerical instability in transformations
+
+!!! note
+
+    The condition number is the ratio of the largest to smallest singular value of the sampling matrix
+
+# Arguments
+* `s`: Pointer to the sampling object
+* `cond_num`: Pointer to store the condition number
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A non-zero error code on failure
+"""
+function spir_sampling_get_cond_num(s, cond_num)
+    ccall((:spir_sampling_get_cond_num, libsparseir), Cint, (Ptr{spir_sampling}, Ptr{Cdouble}), s, cond_num)
 end
 
 """
@@ -1252,7 +1345,7 @@ const SPIR_ORDER_ROW_MAJOR = 0
 
 const SPARSEIR_VERSION_MAJOR = 0
 
-const SPARSEIR_VERSION_MINOR = 1
+const SPARSEIR_VERSION_MINOR = 3
 
 const SPARSEIR_VERSION_PATCH = 0
 

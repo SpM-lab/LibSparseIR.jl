@@ -1,5 +1,6 @@
+
 """
-    TauSampling{T,B} <: AbstractSampling
+TauSampling{T,B} <: AbstractSampling
 
 Sparse sampling in imaginary time using the C API.
 
@@ -18,7 +19,7 @@ mutable struct TauSampling{T<:Real,B<:AbstractBasis} <: AbstractSampling{T,Float
 end
 
 """
-    MatsubaraSampling{T,B} <: AbstractSampling
+MatsubaraSampling{T,B} <: AbstractSampling
 
 Sparse sampling in Matsubara frequencies using the C API.
 
@@ -39,40 +40,24 @@ end
 
 # Convenience constructors
 
-"""
-    TauSampling(basis::AbstractBasis; sampling_points=nothing, factorize=true)
-
-Construct a `TauSampling` object from a basis. If `sampling_points` is not provided,
-the default tau sampling points from the basis are used.
-
-The `factorize` parameter matches SparseIR.jl interface but is currently ignored
-as factorization is handled internally by the C API.
-"""
-function TauSampling(basis::AbstractBasis; sampling_points=nothing, factorize=true)
+function TauSampling(basis::AbstractBasis; sampling_points=nothing)
     if sampling_points === nothing
-        # Get default tau sampling points from basis
-        status = Ref{Int32}(-100)
+        # Use C_API to get default tau sampling points
         n_points = Ref{Int32}(-1)
-
-        ret = C_API.spir_basis_get_n_default_taus(basis.ptr, n_points)
+        status = Ref{Int32}(-100)
+        ret = C_API.spir_basis_get_n_default_taus(_get_ptr(basis), n_points)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default tau points")
-
-        points_array = Vector{Float64}(undef, n_points[])
-        ret = C_API.spir_basis_get_default_taus(basis.ptr, points_array)
+        points = Vector{Float64}(undef, n_points[])
+        ret = C_API.spir_basis_get_default_taus(_get_ptr(basis), points)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default tau points")
-
-        sampling_points = points_array
-    else
-        sampling_points = collect(Float64, sampling_points)
+        sampling_points = points
     end
 
-    # Note: factorize parameter is currently ignored as the C API handles factorization internally
-    # TODO: Add support for factorize parameter in future versions
-
+    # Create sampling object with C_API
     status = Ref{Int32}(-100)
-    ptr = C_API.spir_tau_sampling_new(basis.ptr, length(sampling_points), sampling_points, status)
+    ptr = C_API.spir_tau_sampling_new(_get_ptr(basis), length(sampling_points), sampling_points, status)
     status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create tau sampling: status=$(status[])")
-    ptr != C_NULL || error("Failed to create tau sampling: null pointer returned")
+    ptr != C_API.C_NULL || error("Failed to create tau sampling: null pointer returned")
 
     return TauSampling{Float64,typeof(basis)}(ptr, sampling_points, basis)
 end
@@ -93,11 +78,11 @@ function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_p
         status = Ref{Int32}(-100)
         n_points = Ref{Int32}(-1)
 
-        ret = C_API.spir_basis_get_n_default_matsus(basis.ptr, positive_only, n_points)
+        ret = C_API.spir_basis_get_n_default_matsus(_get_ptr(basis), positive_only, n_points)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default Matsubara points")
 
         points_array = Vector{Int64}(undef, n_points[])
-        ret = C_API.spir_basis_get_default_matsus(basis.ptr, positive_only, points_array)
+        ret = C_API.spir_basis_get_default_matsus(_get_ptr(basis), positive_only, points_array)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default Matsubara points")
 
         # Convert to MatsubaraFreq objects based on statistics
@@ -122,7 +107,7 @@ function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_p
     # TODO: Add support for factorize parameter in future versions
 
     status = Ref{Int32}(-100)
-    ptr = C_API.spir_matsu_sampling_new(basis.ptr, positive_only, length(indices), indices, status)
+    ptr = C_API.spir_matsu_sampling_new(_get_ptr(basis), positive_only, length(indices), indices, status)
     status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create Matsubara sampling: status=$(status[])")
     ptr != C_NULL || error("Failed to create Matsubara sampling: null pointer returned")
 
@@ -131,7 +116,14 @@ end
 
 # Common interface functions
 
-# sampling_points and basis are already defined in abstract.jl
+"""
+    eval_matrix(T, basis, x)
+
+Return evaluation matrix from coefficients to sampling points. `T <: AbstractSampling`.
+"""
+function eval_matrix end
+eval_matrix(::Type{TauSampling}, basis, x)       = permutedims(basis.u(x))
+eval_matrix(::Type{MatsubaraSampling}, basis, x) = permutedims(basis.uhat(x))
 
 """
     npoints(sampling::AbstractSampling)
