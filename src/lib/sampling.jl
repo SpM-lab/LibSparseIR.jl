@@ -69,10 +69,8 @@ Construct a `MatsubaraSampling` object from a basis. If `sampling_points` is not
 the default Matsubara sampling points from the basis are used.
 
 If `positive_only=true`, assumes functions are symmetric in Matsubara frequency.
-The `factorize` parameter matches SparseIR.jl interface but is currently ignored
-as factorization is handled internally by the C API.
 """
-function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing, factorize=true)
+function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_points=nothing)
     if sampling_points === nothing
         # Get default Matsubara sampling points from basis
         status = Ref{Int32}(-100)
@@ -102,9 +100,6 @@ function MatsubaraSampling(basis::AbstractBasis; positive_only=false, sampling_p
 
     # Extract indices for C API
     indices = [Int64(Int(p)) for p in sampling_points]
-
-    # Note: factorize parameter is currently ignored as the C API handles factorization internally
-    # TODO: Add support for factorize parameter in future versions
 
     status = Ref{Int32}(-100)
     ptr = C_API.spir_matsu_sampling_new(_get_ptr(basis), positive_only, length(indices), indices, status)

@@ -35,6 +35,19 @@ function (polys::PiecewiseLegendrePolyVector)(x::Vector{Float64})
     hcat(polys.(x)...)
 end
 
+function (polys::PiecewiseLegendreFTVector)(freq::MatsubaraFreq)
+    n = freq.n
+    sz = Ref{Int32}(-1)
+    spir_funcs_get_size(polys.ptr, sz) == SPIR_COMPUTATION_SUCCESS || error("Failed to get funcs size")
+    ret = Vector{ComplexF64}(undef, Int(sz[]))
+    spir_funcs_eval_matsu(polys.ptr, n, ret) == SPIR_COMPUTATION_SUCCESS || error("Failed to evaluate funcs")
+    return ret
+end
+
+function (polys::PiecewiseLegendreFTVector)(x::AbstractVector)
+    hcat(polys.(x)...)
+end
+
 function Base.getindex(funcs::Ptr{spir_funcs}, i::Int)
     status = Ref{Int32}(-100)
     indices = Vector{Int32}(undef, 1)
