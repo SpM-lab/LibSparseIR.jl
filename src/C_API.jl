@@ -816,6 +816,55 @@ function spir_basis_get_default_matsus(b, positive_only, points)
 end
 
 """
+    spir_basis_get_n_default_matsus_ext(b, positive_only, L, num_points_returned)
+
+Gets the number of default Matsubara sampling points for an IR basis.
+
+This function returns the number of default sampling points in Matsubara frequencies (iωn) that are automatically chosen for optimal conditioning of the sampling matrix. These points are the extrema of the highest-order basis function in Matsubara frequencies.
+
+!!! note
+
+    This function is only available for IR basis objects
+
+!!! note
+
+    The default sampling points are chosen to provide near-optimal conditioning for the given basis size
+
+# Arguments
+* `b`: Pointer to a finite temperature basis object (must be an IR basis)
+* `positive_only`: If true, only positive frequencies are used
+* `L`: Number of requested sampling points.
+* `num_points_returned`: Pointer to store the number of sampling points returned.
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success - A non-zero error code on failure
+# See also
+[`spir_basis_get_default_matsus`](@ref)
+"""
+function spir_basis_get_n_default_matsus_ext(b, positive_only, L, num_points_returned)
+    ccall((:spir_basis_get_n_default_matsus_ext, libsparseir), Cint, (Ptr{spir_basis}, Bool, Cint, Ptr{Cint}), b, positive_only, L, num_points_returned)
+end
+
+"""
+    spir_basis_get_default_matsus_ext(b, positive_only, n_points, points, n_points_returned)
+
+Gets the default Matsubara sampling points for an IR basis.
+
+This function fills the provided array with the default sampling points in Matsubara frequencies (iωn) that are automatically chosen for optimal conditioning of the sampling matrix. These points are the extrema of the highest-order basis function in Matsubara frequencies.
+
+# Arguments
+* `b`: Pointer to a finite temperature basis object (must be an IR basis)
+* `positive_only`: If true, only positive frequencies are used
+* `n_points`: Number of requested sampling points.
+* `points`: Pre-allocated array to store the sampling points. The size of the array must be at least n\\_points.
+* `n_points_returned`: Number of sampling points returned.
+# Returns
+An integer status code: - 0 ([`SPIR_COMPUTATION_SUCCESS`](@ref)) on success
+"""
+function spir_basis_get_default_matsus_ext(b, positive_only, n_points, points, n_points_returned)
+    ccall((:spir_basis_get_default_matsus_ext, libsparseir), Cint, (Ptr{spir_basis}, Bool, Cint, Ptr{Int64}, Ptr{Cint}), b, positive_only, n_points, points, n_points_returned)
+end
+
+"""
     spir_dlr_new(b, status)
 
 Creates a new Discrete Lehmann Representation (DLR) basis.

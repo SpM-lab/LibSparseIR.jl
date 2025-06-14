@@ -59,14 +59,6 @@ struct AugmentedBasis{S<:Statistics,B<:FiniteTempBasis{S},A<:AugmentationTuple,F
     uhat          :: FHAT
 end
 
-"""
-TauSampling(basis; sampling_points=default_tau_sampling_points(basis), factorize=true)
-
-Construct a `TauSampling` object. If not given, the `sampling_points` are chosen
-as the extrema of the highest-order basis function in imaginary time. This turns
-out to be close to optimal with respect to conditioning for this size (within a
-few percent).
-"""
 function TauSampling(basis::AugmentedBasis{S}; sampling_points=default_tau_sampling_points(basis)) where S
     matrix = eval_matrix(TauSampling, basis, sampling_points)
     status = Ref{Int32}(-100)
@@ -75,6 +67,30 @@ function TauSampling(basis::AugmentedBasis{S}; sampling_points=default_tau_sampl
     ptr != C_NULL || error("Failed to create tau sampling: null pointer returned")
 
     return TauSampling{Float64,typeof(basis)}(ptr, sampling_points, basis)
+end
+
+function MatsubaraSampling(
+    basis::AugmentedBasis{S};
+    positive_only=false,
+    sampling_points=default_matsubara_sampling_points(basis; positive_only),
+) where S
+    pts = MatsubaraFreq.(sampling_points)
+    matrix = eval_matrix(MatsubaraSampling, basis, pts)
+    status = Ref{Int32}(-100)
+    ptr = C_API.spir_matsu_sampling_new_with_matrix(
+        C_API.SPIR_ORDER_COLUMN_MAJOR,
+        _statistics_to_c(S),
+        length(basis),
+        positive_only,
+        length(sampling_points),
+        sampling_points,
+        matrix,
+        status,
+    )
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create Matsubara sampling: status=$(status[])")
+    ptr != C_NULL || error("Failed to create Matsubara sampling: null pointer returned")
+
+    return MatsubaraSampling{eltype(pts),typeof(basis)}(ptr, pts, positive_only, basis)
 end
 
 function _get_ptr(basis::AugmentedBasis)
@@ -113,9 +129,16 @@ function default_tau_sampling_points(basis::AugmentedBasis)
     return points
 end
 
-# TODO: Use C_API to call default_sampling_points
 function default_matsubara_sampling_points(basis::AugmentedBasis; positive_only=false)
-    default_matsubara_sampling_points(basis.basis.uhat_full, length(basis); positive_only)
+    n_points = Ref{Cint}(0)
+    status = spir_basis_get_n_default_matsus_ext(_get_ptr(basis.basis), positive_only, length(basis), n_points)
+    status == SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default Matsubara sampling points")
+    points = Vector{Int64}(undef, n_points[])
+    n_points_returned = Ref{Cint}(0)
+    status = spir_basis_get_default_matsus_ext(_get_ptr(basis.basis), positive_only, length(basis), points, n_points_returned)
+    status == SPIR_COMPUTATION_SUCCESS || error("Failed to get default Matsubara sampling points")
+    n_points_returned[] == n_points[] || error("n_points_returned=$(n_points_returned[]) != n_points=$(n_points[])")
+    return points
 end
 
 function iswellconditioned(basis::AugmentedBasis)
@@ -289,6 +312,7 @@ function (aug::MatsubaraConst)(τ)
     -β(aug)/2 ≤ τ ≤ β(aug)/2 || throw(DomainError(τ, "τ must be in [-β(aug)/2, β(aug)/2]."))
     return NaN
 end
+
 function (aug::MatsubaraConst)(::MatsubaraFreq)
     return one(β(aug))
 end
