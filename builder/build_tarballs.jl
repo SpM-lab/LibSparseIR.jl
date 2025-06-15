@@ -24,6 +24,8 @@ platforms = expand_cxxstring_abis(platforms)
 filter!(p -> !(Sys.iswindows(p) && arch(p) == "i686"), platforms)
 filter!(p -> !(Sys.islinux(p) && arch(p) == "powerpc64le"), platforms)
 filter!(p -> !(Sys.islinux(p) && arch(p) == "riscv64"), platforms)
+filter!(p -> !(Sys.islinux(p) && arch(p) == "armv6l"), platforms)
+filter!(p -> !(Sys.islinux(p) && arch(p) == "armv7l"), platforms)
 
 # The products that we will ensure are always built
 products = [
