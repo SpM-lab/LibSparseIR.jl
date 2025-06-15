@@ -10,6 +10,11 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
     v::PiecewiseLegendrePolyVector
     uhat::PiecewiseLegendreFTVector
 	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
+	    # Validate kernel/statistics compatibility
+	    if isa(kernel, RegularizedBoseKernel) && S === Fermionic
+	        throw(ArgumentError("RegularizedBoseKernel is incompatible with Fermionic statistics"))
+	    end
+	    
 	    # Create basis
 	    status = Ref{Int32}(-100)
 	    basis = LibSparseIR.spir_basis_new(_statistics_to_c(S), β, ωmax, kernel.ptr, sve_result.ptr, status)
