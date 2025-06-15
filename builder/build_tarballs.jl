@@ -21,6 +21,7 @@ make install PREFIX=${prefix}
 # platforms are passed in on the command line
 platforms = supported_platforms()
 platforms = expand_cxxstring_abis(platforms)
+filter!(p -> !(cxxstring_abi(p) == "cxx03"), platforms)
 filter!(p -> !(Sys.iswindows(p) && arch(p) == "i686"), platforms)
 filter!(p -> !(Sys.islinux(p) && arch(p) == "powerpc64le"), platforms)
 filter!(p -> !(Sys.islinux(p) && arch(p) == "riscv64"), platforms)
