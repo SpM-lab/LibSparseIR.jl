@@ -18,7 +18,7 @@
 
 	@testset "FiniteTempBasis{S} for K=RegularizedBoseKernel" begin
 		kernel = RegularizedBoseKernel(10.0)
-		@test_throws "Failed to create FiniteTempBasis" FiniteTempBasis(Fermionic(), β, ωmax, ε; kernel)
+		@test_throws ArgumentError("RegularizedBoseKernel is incompatible with Fermionic statistics") FiniteTempBasis(Fermionic(), β, ωmax, ε; kernel)
 
 		kernel = RegularizedBoseKernel(10.0)
 		basis = FiniteTempBasis(Bosonic(), β, ωmax, ε; kernel)
