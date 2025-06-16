@@ -2,10 +2,11 @@ using Pkg
 Pkg.activate(@__DIR__)
 Pkg.instantiate()
 
+import libsparseir_jll
 using Clang.Generators
 using Clang.LibClang.Clang_jll
 
-include_dir = normpath(joinpath(@__DIR__, "../../libsparseir/include"))
+include_dir = normpath(joinpath(libsparseir_jll.artifact_dir, "include"))
 sparseir_dir = joinpath(include_dir, "sparseir")
 
 # wrapper generator options

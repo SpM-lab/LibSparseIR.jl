@@ -1,11 +1,9 @@
 module C_API
 
+using libsparseir_jll
+export libsparseir_jll
+
 using CEnum
-
-using Libdl: dlext
-
-libsparseir = expanduser("~/opt/libsparseir/lib/libsparseir.$(dlext)")
-
 
 const c_complex = ComplexF64
 
@@ -1396,7 +1394,7 @@ const SPARSEIR_VERSION_MAJOR = 0
 
 const SPARSEIR_VERSION_MINOR = 3
 
-const SPARSEIR_VERSION_PATCH = 1
+const SPARSEIR_VERSION_PATCH = 2
 
 # exports
 const PREFIXES = ["spir_", "SPIR_"]
