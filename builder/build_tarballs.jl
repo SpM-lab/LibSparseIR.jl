@@ -1,43 +1,35 @@
 using BinaryBuilder
 
 name = "libsparseir"
-version = v"0.3.1"
+version = v"0.3.2"
 
 # Collection of sources required to complete build
 sources = [
-    GitSource("https://github.com/SpM-lab/libsparseir.git", "c04c1fe5de9f02012ffe654a0a157c36f3b921a3"),
+    GitSource(
+        "https://github.com/SpM-lab/libsparseir.git", 
+        "8ceaf3b3f4843d6ff3451fc5106928c6977c2f68",
+    ),
 ]
 
 # Bash recipe for building across all platforms
 script = raw"""
 cd ${WORKSPACE}/srcdir/libsparseir/bundle
 ./build.sh
-cd dist/libsparseir-0.3.1
+cd dist/libsparseir-0.3.2
 make
 make install PREFIX=${prefix}
 """
 
-# These are the platforms we will build for by default, unless further
-# platforms are passed in on the command line
 platforms = supported_platforms()
 platforms = expand_cxxstring_abis(platforms)
-filter!(p -> !(cxxstring_abi(p) == "cxx03"), platforms)
-filter!(p -> !(arch(p) == "i686"), platforms)
-filter!(p -> !(Sys.islinux(p) && arch(p) == "powerpc64le"), platforms)
-filter!(p -> !(Sys.islinux(p) && arch(p) == "riscv64"), platforms)
-filter!(p -> !(Sys.islinux(p) && arch(p) == "armv6l"), platforms)
-filter!(p -> !(Sys.islinux(p) && arch(p) == "armv7l"), platforms)
 
-# The products that we will ensure are always built
 products = [
     LibraryProduct("libsparseir", :libsparseir),
 ]
 
-# Dependencies that must be installed before this package can be built
 dependencies = [
     Dependency("CompilerSupportLibraries_jll"),
 ]
 
-# Build the tarballs, and possibly a `build.jl` as well.
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies;
     julia_compat="1.10", compilers=[:c, :cxx])
