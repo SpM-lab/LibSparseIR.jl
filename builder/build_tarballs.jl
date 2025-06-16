@@ -20,7 +20,34 @@ make
 make install PREFIX=${prefix}
 """
 
-platforms = supported_platforms()
+platforms = [
+        # glibc Linuces
+        Platform("i686", "linux"),
+        Platform("x86_64", "linux"),
+        Platform("aarch64", "linux"),
+        Platform("armv6l", "linux"),
+        Platform("armv7l", "linux"),
+        # Platform("powerpc64le", "linux"), # does not work
+        # Platform("riscv64", "linux"), # does not work
+
+        # musl Linuces
+        # Platform("i686", "linux"; libc="musl"), # does not work
+        Platform("x86_64", "linux"; libc="musl"),
+        Platform("aarch64", "linux"; libc="musl"),
+        Platform("armv6l", "linux"; libc="musl"),
+        Platform("armv7l", "linux"; libc="musl"),
+
+        # BSDs
+        Platform("x86_64", "macos"),
+        Platform("aarch64", "macos"),
+        Platform("x86_64", "freebsd"),
+        Platform("aarch64", "freebsd"),
+
+        # Windows
+        Platform("i686", "windows"),
+        Platform("x86_64", "windows"),
+    ]
+
 platforms = expand_cxxstring_abis(platforms)
 
 products = [
