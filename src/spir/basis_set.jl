@@ -27,10 +27,10 @@ and associated sparse-sampling objects.
 struct FiniteTempBasisSet
     basis_f    :: FiniteTempBasis{Fermionic}
     basis_b    :: FiniteTempBasis{Bosonic}
-    smpl_tau_f :: TauSampling
-    smpl_tau_b :: TauSampling
-    smpl_wn_f  :: MatsubaraSampling
-    smpl_wn_b  :: MatsubaraSampling
+    smpl_tau_f :: TauSampling64F
+    smpl_tau_b :: TauSampling64B
+    smpl_wn_f  :: MatsubaraSampling64F
+    smpl_wn_b  :: MatsubaraSampling64B
 
     """
         FiniteTempBasisSet(β, ωmax[, ε]; [sve_result])

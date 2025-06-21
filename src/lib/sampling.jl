@@ -18,6 +18,9 @@ mutable struct TauSampling{T<:Real,B<:AbstractBasis} <: AbstractSampling{T,Float
     end
 end
 
+const TauSampling64F = TauSampling{Float64, FiniteTempBasis{Fermionic, LogisticKernel}}
+const TauSampling64B = TauSampling{Float64, FiniteTempBasis{Bosonic, LogisticKernel}}
+
 """
 MatsubaraSampling{T,B} <: AbstractSampling
 
@@ -37,6 +40,9 @@ mutable struct MatsubaraSampling{T<:MatsubaraFreq,B<:AbstractBasis} <: AbstractS
         return obj
     end
 end
+
+const MatsubaraSampling64F = MatsubaraSampling{FermionicFreq, FiniteTempBasis{Fermionic, LogisticKernel}}
+const MatsubaraSampling64B = MatsubaraSampling{BosonicFreq, FiniteTempBasis{Bosonic, LogisticKernel}}
 
 # Convenience constructors
 
