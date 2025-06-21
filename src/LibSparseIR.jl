@@ -4,6 +4,7 @@ include("C_API.jl") # LibSparseIR_C_API
 using .C_API
 
 import LinearAlgebra
+using LinearAlgebra: cond
 using QuadGK: quadgk
 
 export Fermionic, Bosonic
