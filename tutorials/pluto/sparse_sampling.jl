@@ -41,7 +41,7 @@ end
 begin
 	smpl_tau = TauSampling(basis)
 	println("sampling times: ", smpl_tau.sampling_points)
-	# println("Condition number: ", SparseIR.cond(smpl_tau))
+	println("Condition number: ", SparseIR.cond(smpl_tau))
 end
 
 # ╔═╡ a825a7b9-0f17-4512-a697-f993120e7661
@@ -60,7 +60,7 @@ gl_reconst_from_tau = fit(smpl_tau, gtau_smpl)
 begin
 	smpl_matsu = MatsubaraSampling(basis)
 	println("sampling frequencies: ", smpl_matsu.sampling_points)
-	#println("Condition number: ", SparseIR.cond(smpl_matsu))
+	println("Condition number: ", SparseIR.cond(smpl_matsu))
 end
 
 # ╔═╡ 105bf4eb-1de7-49d3-a68f-8e34e4c2b571
