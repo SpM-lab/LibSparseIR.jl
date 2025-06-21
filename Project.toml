@@ -14,11 +14,13 @@ CEnum = "0.5.0"
 Libdl = "1"
 LinearAlgebra = "1"
 QuadGK = "2.11.2"
+StableRNGs = "1.0.3"
 
 [extras]
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 ReTestItems = "817f1d60-ba6b-4fd5-9520-3cf149f6a823"
+StableRNGs = "860ef19b-820b-49d6-a774-d7a799459cd3"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "ReTestItems", "Random"]
+test = ["Test", "ReTestItems", "Random", "StableRNGs"]
