@@ -4,6 +4,8 @@
     using LibSparseIR
     import LibSparseIR as SparseIR
     using LinearAlgebra
+    using StableRNGs
+
 
     @testset "Augmented bosonic basis" begin
         ωmax = 2
@@ -12,8 +14,9 @@
         basis_aug = AugmentedBasis(basis, TauConst, TauLinear)
 
         @test all(isone, SparseIR.significance(basis_aug)[1:3])
+        rng = StableRNG(42)
 
-        gτ = rand(length(basis_aug))
+        gτ = rand(rng, length(basis_aug))
         τ_smpl = TauSampling(basis_aug)
         gl_fit = fit(τ_smpl, gτ)
         gτ_reconst = evaluate(τ_smpl, gl_fit)
