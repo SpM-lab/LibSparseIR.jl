@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.10
+# v0.20.6
 
 using Markdown
 using InteractiveUtils
@@ -69,11 +69,29 @@ struct IPTSolver
         omega_range::Tuple{Float64,Float64}, deg_leggaus::Int64=100)
         quad_rule = _gausslegendre(deg_leggaus, omega_range...)
         smpl_matsu = MatsubaraSampling(basis)
-        smpl_tau = TauSampling(basis)
+
+		pts = let
+			_pts = LibSparseIR.default_tau_sampling_points(basis)
+			pts = Float64[]
+			for p in _pts
+				if p < 0
+					pnew = p + beta
+				else
+					pnew = p
+				end
+				push!(pts, pnew)
+			end
+			sort!(pts)
+		end
+		
+        smpl_tau = TauSampling(basis; sampling_points=pts)
 
         new(U, basis, SparseIR.beta(basis), rho_omega, omega_range, quad_rule, smpl_matsu, smpl_tau)
     end
 end
+
+# ╔═╡ 32a4f2b2-19e8-45e3-b05e-e43001c0a9f7
+
 
 # ╔═╡ 876a5253-5f09-460a-8d09-b80109d5701d
 begin
@@ -203,6 +221,7 @@ end
 # ╠═a8a7b92c-f9bd-4d47-b765-cfd267ac4644
 # ╠═dbfea9c2-8464-4c66-991f-b42d08fbc44e
 # ╠═e774da2a-2465-474a-947a-69581c9d1302
+# ╠═32a4f2b2-19e8-45e3-b05e-e43001c0a9f7
 # ╠═876a5253-5f09-460a-8d09-b80109d5701d
 # ╠═b4002202-0c6d-499f-8bce-bf23eda0fe85
 # ╠═32b41074-6932-43c3-ab2f-77209cc6289a
