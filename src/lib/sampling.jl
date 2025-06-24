@@ -46,7 +46,15 @@ const MatsubaraSampling64B = MatsubaraSampling{BosonicFreq, FiniteTempBasis{Boso
 
 # Convenience constructors
 
-function TauSampling(basis::AbstractBasis; sampling_points=nothing)
+"""
+    TauSampling(basis::AbstractBasis; sampling_points=nothing, use_positive_taus=true)
+
+Construct a `TauSampling` object from a basis. If `sampling_points` is not provided,
+the default tau sampling points from the basis are used.
+
+If `use_positive_taus=true`, the sampling points are folded to the positive tau domain [0, β).
+"""
+function TauSampling(basis::AbstractBasis; sampling_points=nothing, use_positive_taus=true)
     if sampling_points === nothing
         # Use C_API to get default tau sampling points
         n_points = Ref{Int32}(-1)
@@ -56,6 +64,9 @@ function TauSampling(basis::AbstractBasis; sampling_points=nothing)
         points = Vector{Float64}(undef, n_points[])
         ret = C_API.spir_basis_get_default_taus(_get_ptr(basis), points)
         ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default tau points")
+        if use_positive_taus
+            points = mod.(points, basis.beta)
+        end
         sampling_points = points
     end
 
