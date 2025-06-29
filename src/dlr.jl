@@ -33,41 +33,12 @@ Construct a DLR basis from an IR basis.
 
 If `poles` is not provided, uses the default omega sampling points from the IR basis.
 """
-function DiscreteLehmannRepresentation(basis::AbstractBasis, poles=nothing)
-    if poles === nothing
-        # Get default omega sampling points from basis
-        n_poles = Ref{Int32}(-1)
-        ret = C_API.spir_basis_get_n_default_ws(basis.ptr, n_poles)
-        ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default omega points")
-
-        poles = Vector{Float64}(undef, n_poles[])
-        ret = C_API.spir_basis_get_default_ws(basis.ptr, poles)
-        ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default omega points")
-
-        # Create DLR using default constructor
-        status = Ref{Int32}(-100)
-        dlr_ptr = C_API.spir_dlr_new(basis.ptr, status)
-        status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create DLR: status=$(status[])")
-        dlr_ptr != C_NULL || error("Failed to create DLR: null pointer returned")
-    else
-        # Create DLR with user-specified poles
-        poles = collect(Float64, poles)
-        status = Ref{Int32}(-100)
-        dlr_ptr = C_API.spir_dlr_new_with_poles(basis.ptr, length(poles), poles, status)
-        status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create DLR with poles: status=$(status[])")
-        dlr_ptr != C_NULL || error("Failed to create DLR with poles: null pointer returned")
-    end
-
-    # Get the actual poles from the C API as they might differ
-    n_poles_actual = Ref{Int32}(-1)
-    ret = C_API.spir_dlr_get_npoles(dlr_ptr, n_poles_actual)
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of DLR poles")
-
-    poles_actual = Vector{Float64}(undef, n_poles_actual[])
-    ret = C_API.spir_dlr_get_poles(dlr_ptr, poles_actual)
-    ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get DLR poles")
-
-    return DiscreteLehmannRepresentation{typeof(statistics(basis)),typeof(basis)}(dlr_ptr, basis, poles_actual)
+function DiscreteLehmannRepresentation(basis::AbstractBasis, poles=default_omega_sampling_points(basis))
+    status = Ref{Int32}(-100)
+    dlr_ptr = C_API.spir_dlr_new_with_poles(basis.ptr, length(poles), poles, status)
+    status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create DLR with poles: status=$(status[])")
+    dlr_ptr != C_NULL || error("Failed to create DLR with poles: null pointer returned")
+    return DiscreteLehmannRepresentation{typeof(statistics(basis)),typeof(basis)}(dlr_ptr, basis, poles)
 end
 
 
