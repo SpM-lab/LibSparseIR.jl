@@ -2,36 +2,140 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/SpM-lab/LibSparseIR.jl)
 
-Julia interface for libsparseir
+Julia wrapper for the [libsparseir](https://github.com/SpM-lab/libsparseir) C++ library, providing high-performance sparse intermediate representation (IR) of correlation functions in many-body physics.
 
 > [!WARNING]
-> This Julia project is still under construction. Please use other repositories:
-> - https://github.com/SpM-lab/sparse-ir
-> - https://github.com/SpM-lab/SparseIR.jl
-> - https://github.com/SpM-lab/sparse-ir-fortran
+> This Julia wrapper is still under development. For production use, please consider:
+> - [SparseIR.jl](https://github.com/SpM-lab/SparseIR.jl) - Pure Julia implementation (recommended)
+> - [sparse-ir](https://github.com/SpM-lab/sparse-ir) - Python implementation
+> - [sparse-ir-fortran](https://github.com/SpM-lab/sparse-ir-fortran) - Fortran implementation
 
+## Overview
 
-## Set up
+LibSparseIR.jl provides Julia bindings to the C++ libsparseir library, offering optimized routines for:
 
-1. Install Julia
-1. Clone libsparseir and build C-API
+- **Basis construction**: Finite temperature basis using singular value expansion (SVE)
+- **Sparse sampling**: Efficient sampling in imaginary time and Matsubara frequencies
+- **DLR transformations**: Discrete Lehmann Representation for compact representation
+- **Augmented basis**: Extended basis for vertex functions and multi-point correlations
 
+## Features
+
+### Implemented Components
+
+- ✅ **Statistics**: Fermionic and Bosonic
+- ✅ **Kernels**: LogisticKernel, RegularizedBoseKernel
+- ✅ **Basis Functions**: FiniteTempBasis with SVE
+- ✅ **Sampling**: TauSampling, MatsubaraSampling
+- ✅ **DLR**: DiscreteLehmannRepresentation
+- ✅ **Augmentation**: TauConst, TauLinear, MatsubaraConst
+- ✅ **Basis Sets**: FiniteTempBasisSet for multi-Λ calculations
+
+### API Example
+
+```julia
+using LibSparseIR
+
+# Create basis for fermionic system
+β = 10.0        # Inverse temperature
+ωmax = 1.0      # Frequency cutoff
+ε = 1e-10       # Accuracy parameter
+
+basis = FiniteTempBasis(Fermionic(), β, ωmax, ε)
+
+# Sparse sampling in imaginary time
+tau_sampling = TauSampling(basis)
+tau_points = tau_sampling.sampling_points
+
+# Transform between representations
+coeffs = fit(tau_sampling, gtau_values)
+gtau_reconstructed = evaluate(tau_sampling, coeffs)
+```
+
+## Installation
+
+### Prerequisites
+
+1. **Julia 1.10+**
+2. **libsparseir C++ library** built with C API support
+
+### Setup Instructions
+
+1. **Build libsparseir with C API**:
    ```sh
    git clone https://github.com/SpM-lab/libsparseir.git
-   bash build_capi.sh
+   cd libsparseir
+   ./build_capi.sh
    ```
-1. Clone this project(LibSparseIR.jl)
-   ```sh
-   git clone https://github.com/SpM-lab/LibSparseIR.git
-   ```
-1. Build this project:
 
+2. **Clone and install LibSparseIR.jl**:
    ```sh
-   julia -e 'using Pkg; Pkg.build()'
+   git clone https://github.com/SpM-lab/LibSparseIR.jl.git
+   cd LibSparseIR.jl
    ```
-1. It will create `src/C_API.jl` that wraps C-API of libsparseir for Julia interface.
-1. To test our Julia project, run:
+
+3. **Build the Julia package**:
    ```sh
-   julia -e 'using Pkg; Pkg.test()'
+   julia --project -e 'using Pkg; Pkg.instantiate(); Pkg.build()'
    ```
-We use [ReTestItems.jl](https://github.com/JuliaTesting/ReTestItems.jl) as a test framework.
+   This generates `src/C_API.jl` by parsing the C headers using Clang.jl.
+
+4. **Run tests**:
+   ```sh
+   julia --project -e 'using Pkg; Pkg.test()'
+   ```
+
+## Testing
+
+We use [ReTestItems.jl](https://github.com/JuliaTesting/ReTestItems.jl) for testing with tagged test groups:
+
+- Run all tests: `julia -e 'using Pkg; Pkg.test()'`
+- Run specific test groups:
+  ```julia
+  using Pkg
+  Pkg.test(test_args=["--tags", "julia"])      # Pure Julia tests
+  Pkg.test(test_args=["--tags", "wrapper"])    # C wrapper tests
+  Pkg.test(test_args=["--tags", "cinterface"]) # C interface tests
+  ```
+
+## Tutorials
+
+Interactive tutorials are available in the `tutorials/` directory:
+
+- **Pluto notebooks** (`tutorials/pluto/`):
+  - `sparse_sampling.jl` - Introduction to sparse sampling
+  - `transformation_IR.jl` - IR basis transformations
+  - `dlr.jl` - Discrete Lehmann Representation
+  - `dmft_ipt.jl` - DMFT with IPT solver
+  - `flex.jl` - FLEX approximation example
+  - `BgG.jl` - Bethe-Goldstone calculations
+
+- **Jupyter notebooks** (`tutorials/jupyter/`) - Similar content in Jupyter format
+
+To run Pluto tutorials:
+```julia
+using Pluto
+Pluto.run(notebook="tutorials/pluto/sparse_sampling.jl")
+```
+
+## Project Structure
+
+```
+LibSparseIR.jl/
+├── src/
+│   ├── LibSparseIR.jl      # Main module
+│   ├── C_API.jl            # Auto-generated C bindings
+│   ├── abstract.jl         # Abstract interfaces
+│   ├── lib/                # C library wrappers
+│   │   ├── basis.jl        # Basis functions
+│   │   ├── kernel.jl       # Kernel implementations
+│   │   ├── sampling.jl     # Sampling routines
+│   │   ├── dlr.jl          # DLR transformations
+│   │   └── sve.jl          # SVE computations
+│   └── spir/               # Pure Julia extensions
+│       ├── augment.jl      # Augmented basis
+│       └── basis_set.jl    # Multi-Λ basis sets
+├── test/                   # Test suites
+├── tutorials/              # Interactive tutorials
+└── builder/                # BinaryBuilder scripts
+```
