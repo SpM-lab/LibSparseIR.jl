@@ -64,3 +64,6 @@ mutable struct RegularizedBoseKernel <: AbstractKernel
         return kernel
     end
 end
+
+Λ(kernel::LogisticKernel) = kernel.Λ
+Λ(kernel::RegularizedBoseKernel) = kernel.Λ

@@ -56,16 +56,10 @@ If `use_positive_taus=true`, the sampling points are folded to the positive tau 
 """
 function TauSampling(basis::AbstractBasis; sampling_points=nothing, use_positive_taus=true)
     if sampling_points === nothing
-        # Use C_API to get default tau sampling points
-        n_points = Ref{Int32}(-1)
-        status = Ref{Int32}(-100)
-        ret = C_API.spir_basis_get_n_default_taus(_get_ptr(basis), n_points)
-        ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get number of default tau points")
-        points = Vector{Float64}(undef, n_points[])
-        ret = C_API.spir_basis_get_default_taus(_get_ptr(basis), points)
-        ret == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to get default tau points")
+        points = default_tau_sampling_points(basis)
         if use_positive_taus
-            points = mod.(points, basis.beta)
+            points = mod.(points, β(basis))
+            sort!(points)
         end
         sampling_points = points
     end
@@ -345,3 +339,7 @@ function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::Ab
     ] && throw(DimensionMismatch("Failed to fit sampling: status=$ret"))
     return output
 end
+
+# Convenience property accessors (similar to SparseIR.jl)
+Base.getproperty(s::TauSampling, p::Symbol) = p === :tau ? sampling_points(s) : getfield(s, p)
+Base.getproperty(s::MatsubaraSampling, p::Symbol) = p === :ωn ? sampling_points(s) : getfield(s, p)
