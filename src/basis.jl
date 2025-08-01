@@ -9,7 +9,7 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
     u::PiecewiseLegendrePolyVector
     v::PiecewiseLegendrePolyVector
     uhat::PiecewiseLegendreFTVector
-	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real) where {S<:Statistics, K<:AbstractKernel}
+	function FiniteTempBasis{S}(kernel::K, sve_result::SVEResult{K}, β::Real, ωmax::Real, ε::Real, max_size::Int) where {S<:Statistics, K<:AbstractKernel}
 	    # Validate kernel/statistics compatibility
 	    if isa(kernel, RegularizedBoseKernel) && S === Fermionic
 	        throw(ArgumentError("RegularizedBoseKernel is incompatible with Fermionic statistics"))
@@ -17,8 +17,8 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 
 	    # Create basis
 	    status = Ref{Int32}(-100)
-	    basis = LibSparseIR.spir_basis_new(_statistics_to_c(S), β, ωmax, kernel.ptr, sve_result.ptr, status)
-	    status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS || error("Failed to create FiniteTempBasis $S $K $β $ωmax $ε $status[]")
+	    basis = LibSparseIR.spir_basis_new(_statistics_to_c(S), β, ωmax, kernel.ptr, sve_result.ptr, max_size, status)
+	    status[] == LibSparseIR.SPIR_COMPUTATION_SUCCESS || error("Failed to create FiniteTempBasis $S $K $β $ωmax $ε $max_size $status[]")
 
         basis_size = Ref{Int32}(0)
         spir_basis_get_size(basis, basis_size) == SPIR_COMPUTATION_SUCCESS || error("Failed to get basis size")
@@ -45,13 +45,13 @@ mutable struct FiniteTempBasis{S, K} <: AbstractBasis{S}
 	end
 end
 
-function FiniteTempBasis{S}(β::Real, ωmax::Real, ε::Real; kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel, ε)) where {S<:Statistics}
-	FiniteTempBasis{S}(kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε))
+function FiniteTempBasis{S}(β::Real, ωmax::Real, ε::Real; kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel, ε), max_size=-1) where {S<:Statistics}
+	FiniteTempBasis{S}(kernel, sve_result, Float64(β), Float64(ωmax), Float64(ε), max_size)
 end
 
 # Convenience constructor - matches SparseIR.jl signature
-function FiniteTempBasis(stat::S, β::Real, ωmax::Real, ε::Real; kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel, ε)) where {S<:Statistics}
-    FiniteTempBasis{typeof(stat)}(β, ωmax, ε; kernel, sve_result)
+function FiniteTempBasis(stat::S, β::Real, ωmax::Real, ε::Real; kernel=LogisticKernel(β * ωmax), sve_result=SVEResult(kernel, ε), max_size=-1) where {S<:Statistics}
+    FiniteTempBasis{typeof(stat)}(β, ωmax, ε; kernel, sve_result, max_size)
 end
 
 function default_tau_sampling_points(basis::FiniteTempBasis)

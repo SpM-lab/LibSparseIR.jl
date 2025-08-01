@@ -427,7 +427,7 @@ function spir_funcs_get_roots(funcs, roots)
 end
 
 """
-    spir_basis_new(statistics, beta, omega_max, k, sve, status)
+    spir_basis_new(statistics, beta, omega_max, k, sve, max_size, status)
 
 Creates a new finite temperature IR basis using a pre-computed SVE result.
 
@@ -443,14 +443,15 @@ This function creates a intermediate representation (IR) basis using a pre-compu
 * `omega_max`: Frequency cutoff ωmax (must be non-negative)
 * `k`: Pointer to the kernel object used for the basis construction
 * `sve`: Pointer to a pre-computed SVE result for the kernel
+* `max_size`: Maximum number of basis functions to include. If -1, all
 * `status`: Pointer to store the status code
 # Returns
 Pointer to the newly created basis object, or NULL if creation fails
 # See also
 [`spir_sve_result_new`](@ref), spir\\_release\\_finite\\_temp\\_basis
 """
-function spir_basis_new(statistics, beta, omega_max, k, sve, status)
-    ccall((:spir_basis_new, libsparseir), Ptr{spir_basis}, (Cint, Cdouble, Cdouble, Ptr{spir_kernel}, Ptr{spir_sve_result}, Ptr{Cint}), statistics, beta, omega_max, k, sve, status)
+function spir_basis_new(statistics, beta, omega_max, k, sve, max_size, status)
+    ccall((:spir_basis_new, libsparseir), Ptr{spir_basis}, (Cint, Cdouble, Cdouble, Ptr{spir_kernel}, Ptr{spir_sve_result}, Cint, Ptr{Cint}), statistics, beta, omega_max, k, sve, max_size, status)
 end
 
 """
@@ -1396,7 +1397,7 @@ const SPARSEIR_VERSION_MAJOR = 0
 
 const SPARSEIR_VERSION_MINOR = 3
 
-const SPARSEIR_VERSION_PATCH = 1
+const SPARSEIR_VERSION_PATCH = 2
 
 # exports
 const PREFIXES = ["spir_", "SPIR_"]
