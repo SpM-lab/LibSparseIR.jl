@@ -160,19 +160,6 @@ Quantum statistic (Statistics instance, Fermionic() or Bosonic()).
 statistics(::AbstractBasis{S}) where {S<:Statistics} = S()
 
 """
-    overlap(a::AbstractVector, basis::AbstractBasis, b::AbstractVector)
-
-Compute the overlap ⟨a|S|b⟩ where S is the singular value matrix of the basis.
-"""
-function overlap(a::AbstractVector, basis::AbstractBasis, b::AbstractVector)
-    length(a) == length(basis) || throw(DimensionMismatch("Length of a must match basis size"))
-    length(b) == length(basis) || throw(DimensionMismatch("Length of b must match basis size"))
-
-    svals = s(basis)
-    return sum(a[i] * svals[i] * b[i] for i in 1:length(basis))
-end
-
-"""
     Λ(basis::AbstractBasis)
     lambda(basis::AbstractBasis)
 
