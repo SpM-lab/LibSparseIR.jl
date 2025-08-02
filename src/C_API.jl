@@ -192,7 +192,7 @@ function spir_kernel_domain(k, xmin, xmax, ymin, ymax)
 end
 
 """
-    spir_sve_result_new(k, epsilon, status)
+    spir_sve_result_new(k, epsilon, cutoff, lmax, n_gauss, work_dtype, status)
 
 Perform truncated singular value expansion (SVE) of a kernel.
 
@@ -221,8 +221,8 @@ Pointer to the newly created SVE result, or NULL if creation fails
 # See also
 spir\\_release\\_sve\\_result
 """
-function spir_sve_result_new(k, epsilon, status)
-    ccall((:spir_sve_result_new, libsparseir), Ptr{spir_sve_result}, (Ptr{spir_kernel}, Cdouble, Ptr{Cint}), k, epsilon, status)
+function spir_sve_result_new(k, epsilon, cutoff, lmax, n_gauss, work_dtype, status)
+    ccall((:spir_sve_result_new, libsparseir), Ptr{spir_sve_result}, (Ptr{spir_kernel}, Cdouble, Cdouble, Cint, Cint, Cint, Ptr{Cint}), k, epsilon, cutoff, lmax, n_gauss, work_dtype, status)
 end
 
 """
@@ -1393,11 +1393,15 @@ const SPIR_ORDER_COLUMN_MAJOR = 1
 
 const SPIR_ORDER_ROW_MAJOR = 0
 
+const SPIR_TWORK_FLOAT64 = 0
+
+const SPIR_TWORK_FLOAT64X2 = 1
+
 const SPARSEIR_VERSION_MAJOR = 0
 
-const SPARSEIR_VERSION_MINOR = 3
+const SPARSEIR_VERSION_MINOR = 4
 
-const SPARSEIR_VERSION_PATCH = 2
+const SPARSEIR_VERSION_PATCH = 0
 
 # exports
 const PREFIXES = ["spir_", "SPIR_"]
