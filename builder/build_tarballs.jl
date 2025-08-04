@@ -1,13 +1,13 @@
 using BinaryBuilder
 
 name = "libsparseir"
-version = v"0.3.2"
+version = v"0.4.0"
 
 # Collection of sources required to complete build
 sources = [
     GitSource(
         "https://github.com/SpM-lab/libsparseir.git", 
-        "8ceaf3b3f4843d6ff3451fc5106928c6977c2f68",
+        "438aae6e37c5025ebd7c1ad99a9c560e43224329",
     ),
 ]
 
@@ -15,7 +15,7 @@ sources = [
 script = raw"""
 cd ${WORKSPACE}/srcdir/libsparseir/bundle
 ./build.sh
-cd dist/libsparseir-0.3.2
+cd dist/libsparseir-0.4.0
 make
 make install PREFIX=${prefix}
 """
