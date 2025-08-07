@@ -55,9 +55,17 @@ An `SVEResult` containing the truncated singular value expansion.
 mutable struct SVEResult{K<:AbstractKernel}
     ptr::Ptr{spir_sve_result}
     kernel::K
-    function SVEResult(kernel::K, ε::Real, cutoff::Real, lmax::Int, n_gauss::Int, Twork::Int) where {K<:AbstractKernel}
+    function SVEResult(kernel::K, ε::Real; cutoff::Union{Nothing, Real}=nothing, lmax::Integer=typemax(Int32), n_gauss::Integer=-1, Twork::Union{Nothing, Integer}=nothing) where {K<:AbstractKernel}
+        if isnothing(Twork)
+          Twork = SPIR_TWORK_FLOAT64X2
+        end
+
+        if isnothing(cutoff)
+          cutoff = -1
+        end
+
         status = Ref{Int32}(-100)
-        sve_result = spir_sve_result_new(kernel.ptr, ε, status)
+        sve_result = spir_sve_result_new(kernel.ptr, ε, cutoff, lmax, n_gauss, Twork, status)
         status[] == 0 || error("Failed to create SVEResult")
         result = new{K}(sve_result, kernel)
         finalizer(r -> spir_sve_result_release(r.ptr), result)
@@ -65,7 +73,8 @@ mutable struct SVEResult{K<:AbstractKernel}
     end
 end
 
-function SVEResult(K::AbstractKernel, ε::Real, cutoff=nothing, lmax::Int32=typemax(Int32), n_gauss::Int=-1, Twork=nothing)
+#=
+function SVEResult(K::AbstractKernel, ε::Real; cutoff=nothing, lmax::Int32=typemax(Int32), n_gauss::Integer=-1, Twork=nothing)
     if isnothing(Twork)
       Twork = SPIR_TWORK_FLOAT64X2
     end
@@ -74,7 +83,8 @@ function SVEResult(K::AbstractKernel, ε::Real, cutoff=nothing, lmax::Int32=type
       cutoff = -1
     end
 
-    SVEResult(K, ε, cutoff, lmax, n_gauss, Twork)
+    SVEResult(K, ε, cutoff, Int32(lmax), Int32(n_gauss), Twork)
 
     return result
 end
+=#
