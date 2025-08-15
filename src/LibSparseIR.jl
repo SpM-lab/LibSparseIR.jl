@@ -15,7 +15,7 @@ export overlap
 export LogisticKernel, RegularizedBoseKernel
 export AugmentedBasis, TauConst, TauLinear, MatsubaraConst
 export TauSampling, MatsubaraSampling, evaluate, fit, evaluate!, fit!,
-       sampling_points, basis, npoints
+       sampling_points, npoints
 export from_IR, to_IR, npoles, get_poles, default_omega_sampling_points
 
 include("freq.jl")
