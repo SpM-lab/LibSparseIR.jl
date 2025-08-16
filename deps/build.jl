@@ -25,4 +25,8 @@ ctx = create_context(headers, args, options)
 # run generator
 build!(ctx)
 
-run(`sed -i '' 's/const c_complex = ComplexF32/const c_complex = ComplexF64/g' $(joinpath(@__DIR__, "../src/C_API.jl"))`)
+# Replace line 28 with:
+file_path = joinpath(@__DIR__, "../src/C_API.jl")
+content = read(file_path, String)
+content = replace(content, "const c_complex = ComplexF32" => "const c_complex = ComplexF64")
+write(file_path, content)
