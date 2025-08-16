@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Clone libsparseir
         run: |
-          git clone https://github.com/SpM-lab/libsparseir.git --depth 1
+          git clone https://github.com/SpM-lab/libsparseir.git --depth 1 ../
           cd libsparseir
           bash build_capi.sh
       - uses: actions/checkout@v4
