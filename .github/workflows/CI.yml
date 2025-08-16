@@ -34,8 +34,8 @@ jobs:
     steps:
       - name: Clone libsparseir
         run: |
-          git clone https://github.com/SpM-lab/libsparseir.git --depth 1 ../
-          cd libsparseir
+          git clone https://github.com/SpM-lab/libsparseir.git --depth 1 ../libsparseir
+          cd ../libsparseir
           bash build_capi.sh
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
