@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.6
+# v0.20.13
 
 using Markdown
 using InteractiveUtils
@@ -69,22 +69,7 @@ struct IPTSolver
         omega_range::Tuple{Float64,Float64}, deg_leggaus::Int64=100)
         quad_rule = _gausslegendre(deg_leggaus, omega_range...)
         smpl_matsu = MatsubaraSampling(basis)
-
-		pts = let
-			_pts = LibSparseIR.default_tau_sampling_points(basis)
-			pts = Float64[]
-			for p in _pts
-				if p < 0
-					pnew = p + beta
-				else
-					pnew = p
-				end
-				push!(pts, pnew)
-			end
-			sort!(pts)
-		end
-		
-        smpl_tau = TauSampling(basis; sampling_points=pts)
+        smpl_tau = TauSampling(basis)
 
         new(U, basis, SparseIR.beta(basis), rho_omega, omega_range, quad_rule, smpl_matsu, smpl_tau)
     end
@@ -112,7 +97,7 @@ begin
 	function compute_sigma_iv(solver::IPTSolver, g0_iv::Vector{ComplexF64})
 	    g0_IR = fit(solver.smpl_matsu, g0_iv, dim=1)
 	    g0_tau = evaluate(solver.smpl_tau, g0_IR)
-	    sigma_tau = (solver.U)^2 .* (g0_tau).^2 .* g0_tau[end:-1:1]
+	    sigma_tau = (solver.U)^2 .* (g0_tau).^2 .* (-1 .* g0_tau[end:-1:1])
 	    sigma_IR = fit(solver.smpl_tau, sigma_tau)
 	    return evaluate(solver.smpl_matsu, sigma_IR, dim=1)
 	end
@@ -192,6 +177,9 @@ begin
 	Z, sigma_history = sweepU(basis, D, U_range, rho_omega, omega_range, nitr, mixing);
 end
 
+# ╔═╡ eb8bc670-ce2d-4f3f-b432-652acc61be38
+
+
 # ╔═╡ 1b585b75-f92c-4be7-91d4-7001cf018348
 begin
 	sigma = imag.(sigma_history[begin][1])
@@ -225,5 +213,6 @@ end
 # ╠═876a5253-5f09-460a-8d09-b80109d5701d
 # ╠═b4002202-0c6d-499f-8bce-bf23eda0fe85
 # ╠═32b41074-6932-43c3-ab2f-77209cc6289a
+# ╠═eb8bc670-ce2d-4f3f-b432-652acc61be38
 # ╠═1b585b75-f92c-4be7-91d4-7001cf018348
 # ╠═45b5dc82-88ed-427f-adb2-7489e8328b85

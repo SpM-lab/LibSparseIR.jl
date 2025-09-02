@@ -1,5 +1,5 @@
 ### A Pluto.jl notebook ###
-# v0.20.10
+# v0.20.13
 
 using Markdown
 using InteractiveUtils
@@ -313,7 +313,7 @@ begin
 	    """ Calculate irreducible susciptibility chi0(iv,q) """
 	    crit = Array{ComplexF64}(undef, solver.mesh.bntau, solver.mesh.nk1, solver.mesh.nk2)
 	    for iy in 1:solver.mesh.nk2, ix in 1:solver.mesh.nk1, it in 1:solver.mesh.bntau
-	        crit[it,ix,iy] = solver.grit[it,ix,iy] * solver.grit[solver.mesh.bntau-it+1,ix,iy]
+	        crit[it,ix,iy] = solver.grit[it,ix,iy] * (- solver.grit[solver.mesh.bntau-it+1,ix,iy])
 	    end
 	
 	    # Fourier transform
