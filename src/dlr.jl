@@ -43,7 +43,7 @@ end
 
 
 """
-    from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray, dims=1)
+    from_IR(dlr::DiscreteLehmannRepresentation, gl::Array, dims=1)
 
 Transform from IR basis coefficients to DLR coefficients.
 
@@ -55,7 +55,7 @@ Transform from IR basis coefficients to DLR coefficients.
 # Returns
 DLR coefficients with the same shape as input, but with size `length(dlr)` along dimension `dims`.
 """
-function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}, dims=1) where {T,N}
+function from_IR(dlr::DiscreteLehmannRepresentation, gl::Array{T,N}, dims=1) where {T,N}
     # Check dimensions
     size(gl, dims) == length(dlr.basis) || throw(DimensionMismatch("Input array has wrong size along dimension $dims"))
 
@@ -86,7 +86,7 @@ function from_IR(dlr::DiscreteLehmannRepresentation, gl::AbstractArray{T,N}, dim
 end
 
 """
-    to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray, dims=1)
+    to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::Array, dims=1)
 
 Transform from DLR coefficients to IR basis coefficients.
 
@@ -98,7 +98,7 @@ Transform from DLR coefficients to IR basis coefficients.
 # Returns
 IR basis coefficients with the same shape as input, but with size `length(dlr.basis)` along dimension `dims`.
 """
-function to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::AbstractArray{T,N}, dims=1) where {T,N}
+function to_IR(dlr::DiscreteLehmannRepresentation, g_dlr::Array{T,N}, dims=1) where {T,N}
     # Check dimensions
     size(g_dlr, dims) == length(dlr) || throw(DimensionMismatch("Input array has wrong size along dimension $dims"))
 

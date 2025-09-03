@@ -70,6 +70,9 @@ function TauSampling(basis::AbstractBasis; sampling_points=nothing, use_positive
 
     # Create sampling object with C_API
     status = Ref{Int32}(-100)
+    if !_is_column_major_contiguous(sampling_points)
+        error("Sampling points must be contiguous")
+    end
     ptr = C_API.spir_tau_sampling_new(_get_ptr(basis), length(sampling_points), sampling_points, status)
     status[] == C_API.SPIR_COMPUTATION_SUCCESS || error("Failed to create tau sampling: status=$(status[])")
     ptr != C_API.C_NULL || error("Failed to create tau sampling: null pointer returned")
@@ -150,13 +153,13 @@ end
 # Evaluation and fitting functions
 
 """
-    evaluate(sampling::AbstractSampling, al::AbstractArray; dim=1)
+    evaluate(sampling::AbstractSampling, al::Array; dim=1)
 
 Evaluate basis coefficients at the sampling points using the C API.
 
 For multidimensional arrays, `dim` specifies which dimension corresponds to the basis coefficients.
 """
-function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractArray{T,N}; dim=1) where {T,N}
+function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, al::Array{T,N}; dim=1) where {T,N}
     # Determine output dimensions
     output_dims = collect(size(al))
     output_dims[dim] = npoints(sampling)
@@ -177,11 +180,11 @@ function evaluate(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractAr
 end
 
 """
-    evaluate!(output::AbstractArray, sampling::AbstractSampling, al::AbstractArray; dim=1)
+    evaluate!(output::Array, sampling::AbstractSampling, al::Array; dim=1)
 
 In-place version of [`evaluate`](@ref). Write results to the pre-allocated `output` array.
 """
-function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function evaluate!(output::Array{Tout,N}, sampling::TauSampling, al::Array{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
     expected_dims = collect(size(al))
     expected_dims[dim] = npoints(sampling)
@@ -192,6 +195,13 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abs
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
+
+    if !_is_column_major_contiguous(al)
+        error("Input array must be contiguous")
+    end
+    if !_is_column_major_contiguous(output)
+        error("Output array must be contiguous")
+    end
 
     # Call appropriate C function based on input/output types
     if Tin <: Real && Tout <: Real
@@ -210,7 +220,7 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abs
     return output
 end
 
-function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function evaluate!(output::Array{Tout,N}, sampling::MatsubaraSampling, al::Array{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
     expected_dims = collect(size(al))
     expected_dims[dim] = npoints(sampling)
@@ -221,6 +231,13 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, a
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
+
+    if !_is_column_major_contiguous(al)
+        error("Input array must be contiguous")
+    end
+    if !_is_column_major_contiguous(output)
+        error("Output array must be contiguous")
+    end
 
     # Call appropriate C function based on input/output types
     if Tin <: Real && Tout <: Complex
@@ -240,13 +257,13 @@ function evaluate!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, a
 end
 
 """
-    fit(sampling::AbstractSampling, al::AbstractArray; dim=1)
+    fit(sampling::AbstractSampling, al::Array; dim=1)
 
 Fit basis coefficients from values at sampling points using the C API.
 
 For multidimensional arrays, `dim` specifies which dimension corresponds to the sampling points.
 """
-function fit(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractArray{T,N}; dim=1) where {T,N}
+function fit(sampling::Union{TauSampling,MatsubaraSampling}, al::Array{T,N}; dim=1) where {T,N}
     # Determine output dimensions
     output_dims = collect(size(al))
     output_dims[dim] = length(sampling.basis)
@@ -277,11 +294,11 @@ function fit(sampling::Union{TauSampling,MatsubaraSampling}, al::AbstractArray{T
 end
 
 """
-    fit!(output::AbstractArray, sampling::AbstractSampling, al::AbstractArray; dim=1)
+    fit!(output::Array, sampling::AbstractSampling, al::Array; dim=1)
 
 In-place version of [`fit`](@ref). Write results to the pre-allocated `output` array.
 """
-function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function fit!(output::Array{Tout,N}, sampling::TauSampling, al::Array{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
     expected_dims = collect(size(al))
     expected_dims[dim] = length(sampling.basis)
@@ -292,6 +309,13 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abstract
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
+
+    if !_is_column_major_contiguous(al)
+        error("Input array must be contiguous")
+    end
+    if !_is_column_major_contiguous(output)
+        error("Output array must be contiguous")
+    end
 
     # Call appropriate C function
     if Tin <: Real && Tout <: Real
@@ -310,7 +334,7 @@ function fit!(output::AbstractArray{Tout,N}, sampling::TauSampling, al::Abstract
     return output
 end
 
-function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::AbstractArray{Tin,N}; dim=1) where {Tout,Tin,N}
+function fit!(output::Array{Tout,N}, sampling::MatsubaraSampling, al::Array{Tin,N}; dim=1) where {Tout,Tin,N}
     # Check dimensions
     expected_dims = collect(size(al))
     expected_dims[dim] = length(sampling.basis)
@@ -321,6 +345,14 @@ function fit!(output::AbstractArray{Tout,N}, sampling::MatsubaraSampling, al::Ab
     input_dims = Int32[size(al)...]
     target_dim = Int32(dim - 1)  # C uses 0-based indexing
     order = C_API.SPIR_ORDER_COLUMN_MAJOR
+
+    if !_is_column_major_contiguous(al)
+        error("Input array must be contiguous")
+    end
+    if !_is_column_major_contiguous(output)
+        error("Output array must be contiguous")
+    end
+
     # Call appropriate C function based on input/output types
     if Tin <: Complex && Tout <: Complex
         # Use complex-to-complex API and then extract real part if needed

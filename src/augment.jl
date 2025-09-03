@@ -172,6 +172,7 @@ function (a::AbstractAugmentedFunction)(x)
     faug_x = [faug_l(x) for faug_l in faug(a)]
     return vcat(faug_x, fbasis_x)
 end
+
 function (a::AbstractAugmentedFunction)(x::AbstractArray)
     fbasis_x = fbasis(a)(x)
     faug_x = reduce(vcat, faug_l.(reshape(x, (1, :))) for faug_l in faug(a))
