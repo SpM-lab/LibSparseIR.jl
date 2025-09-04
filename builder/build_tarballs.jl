@@ -1,23 +1,33 @@
-using BinaryBuilder
+using BinaryBuilder, Pkg
 
 name = "libsparseir"
-version = v"0.4.0"
+version = v"0.4.2"
 
 # Collection of sources required to complete build
 sources = [
     GitSource(
         "https://github.com/SpM-lab/libsparseir.git", 
-        "438aae6e37c5025ebd7c1ad99a9c560e43224329",
+        "bb5147da806c82e82695da7701b9421182105765",
     ),
+    GitSource(
+        "https://github.com/tuwien-cms/libxprec.git",
+        "d35f3fa9a962d3f96a1eef63132030fd869c183a"
+    )
 ]
 
 # Bash recipe for building across all platforms
 script = raw"""
-cd ${WORKSPACE}/srcdir/libsparseir/bundle
-./build.sh
-cd dist/libsparseir-0.4.0
-make
-make install PREFIX=${prefix}
+cd ${WORKSPACE}/srcdir/libsparseir/
+install_license LICENSE
+if [[ "${target}" == *mingw* ]]; then
+  LBT="${libdir}/libblastrampoline-5.dll"
+else
+  LBT="-lblastrampoline"
+fi
+
+c++ -O2 -Wall -fPIC -shared -std=c++11 -I${includedir}/eigen3/ -Iinclude -I../libxprec/include ${LBT} src/*.cpp -o ${prefix}/lib/libsparseir.${dlext}
+mkdir -p ${prefix}/include/sparseir/
+cp include/sparseir/sparseir.h include/sparseir/spir_status.h include/sparseir/version.h ${prefix}/include/sparseir/
 """
 
 platforms = [
@@ -48,6 +58,8 @@ platforms = [
         Platform("x86_64", "windows"),
     ]
 
+platforms = [Platform("aarch64", "macos"),]
+
 platforms = expand_cxxstring_abis(platforms)
 
 products = [
@@ -56,6 +68,8 @@ products = [
 
 dependencies = [
     Dependency("CompilerSupportLibraries_jll"),
+    BuildDependency("Eigen_jll"),
+    Dependency(PackageSpec(name="libblastrampoline_jll", uuid="8e850b90-86db-534c-a0d3-1478176c7d93"), compat="5.4.0"),
 ]
 
 build_tarballs(ARGS, name, version, sources, script, platforms, products, dependencies;
