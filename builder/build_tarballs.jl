@@ -25,9 +25,8 @@ else
   LBT="-lblastrampoline"
 fi
 
-c++ -O2 -Wall -fPIC -shared -std=c++11 -I${includedir}/eigen3/ -Iinclude -I../libxprec/include ${LBT} src/*.cpp -o ${prefix}/lib/libsparseir.${dlext}
-mkdir -p ${prefix}/include/sparseir/
-cp include/sparseir/sparseir.h include/sparseir/spir_status.h include/sparseir/version.h ${prefix}/include/sparseir/
+${CXX} -O3 -fPIC -shared -std=c++11 -I${includedir}/eigen3/ -Iinclude -I../libxprec/include ${LBT} src/*.cpp -o ${libdir}/libsparseir.${dlext}
+cp include/sparseir/sparseir.h include/sparseir/spir_status.h include/sparseir/version.h ${includedir}
 """
 
 platforms = [
@@ -57,8 +56,6 @@ platforms = [
         Platform("i686", "windows"),
         Platform("x86_64", "windows"),
     ]
-
-platforms = [Platform("aarch64", "macos"),]
 
 platforms = expand_cxxstring_abis(platforms)
 
