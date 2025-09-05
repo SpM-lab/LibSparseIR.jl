@@ -1,3 +1,3 @@
 using Libdl: dlext
-
-libsparseir = expanduser("~/opt/libsparseir/lib/libsparseir.$(dlext)")
+using libsparseir_jll
+# libsparseir = expanduser("~/opt/libsparseir/lib/libsparseir.$(dlext)")
