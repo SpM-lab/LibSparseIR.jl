@@ -5,10 +5,12 @@ version = v"0.4.2"
 
 # Collection of sources required to complete build
 sources = [
+    # libsparseir v0.4.2
     GitSource(
         "https://github.com/SpM-lab/libsparseir.git", 
         "bb5147da806c82e82695da7701b9421182105765",
     ),
+    # libxprec v0.7.0
     GitSource(
         "https://github.com/tuwien-cms/libxprec.git",
         "d35f3fa9a962d3f96a1eef63132030fd869c183a"
@@ -36,11 +38,11 @@ platforms = [
         Platform("aarch64", "linux"),
         Platform("armv6l", "linux"),
         Platform("armv7l", "linux"),
-        # Platform("powerpc64le", "linux"), # does not work
-        # Platform("riscv64", "linux"), # does not work
+        # Platform("powerpc64le", "linux"), # Build fails in this environment
+        # Platform("riscv64", "linux"), # Build fails in this environment
 
         # musl Linuces
-        # Platform("i686", "linux"; libc="musl"), # does not work
+        # Platform("i686", "linux"; libc="musl"), # Build fails in this environment
         Platform("x86_64", "linux"; libc="musl"),
         Platform("aarch64", "linux"; libc="musl"),
         Platform("armv6l", "linux"; libc="musl"),
